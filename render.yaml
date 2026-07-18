@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: lousa-moon-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    autoDeployTrigger: commit
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        sync: false
+      - key: MIGRATION_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REQUIRE_REDIS
+        value: "true"
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: AUTH_PROVIDER
+        value: firebase
+      - key: FIREBASE_PROJECT_ID
+        value: lousa-moon
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: console
+      - key: EMAIL_FROM
+        value: "LOUSA MOON <onboarding@resend.dev>"
+      - key: SMS_PROVIDER
+        value: console
+      - key: PAYMENT_PROVIDER
+        value: sandbox
+      - key: DELIVERY_ZONE_BASE_FEE_MINOR
+        value: "0"
+      - key: DELIVERY_ZONE_RADIUS_KM
+        value: "15"
+      - key: ALLOW_DEV_OTP_RESPONSE
+        value: "false"

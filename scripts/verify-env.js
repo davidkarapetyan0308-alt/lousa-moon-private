@@ -13,7 +13,10 @@ for (const key of requiredApi) {
 if (appEnv === 'production') {
   if (!process.env.REDIS_URL) missing('REDIS_URL');
   if (!process.env.MIGRATION_DATABASE_URL) missing('MIGRATION_DATABASE_URL');
-  if (!process.env.PUBLIC_API_URL) missing('PUBLIC_API_URL');
+  if (!process.env.PUBLIC_API_URL && !process.env.RENDER_EXTERNAL_HOSTNAME) {
+    console.error('[verify-env] Missing PUBLIC_API_URL or RENDER_EXTERNAL_HOSTNAME');
+    ok = false;
+  }
   if (!process.env.FIREBASE_PROJECT_ID) missing('FIREBASE_PROJECT_ID');
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON && !(process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)) {
     console.error('[verify-env] Missing Firebase Admin credentials');

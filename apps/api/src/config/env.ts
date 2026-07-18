@@ -52,6 +52,10 @@ function parseOrigins(value: string) {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
+export function resolvePublicApiUrl(explicitUrl: string, renderHostname: string) {
+  return explicitUrl || (renderHostname ? `https://${renderHostname}` : null);
+}
+
 function assertNotPlaceholder(name: string, value: string, env: AppEnv) {
   if (env !== 'production') return;
   if (!value || /CHANGE_ME|placeholder|demo|test_secret|localhost/i.test(value)) {
@@ -94,7 +98,7 @@ export function loadApiEnv(): ApiEnv {
   const mapTilerApiKey = raw('MAPTILER_API_KEY') || raw('EXPO_PUBLIC_MAPTILER_API_KEY');
   const paymentProvider = raw('PAYMENT_PROVIDER') || 'sandbox';
   const paymentSecretKey = raw('PAYMENT_SECRET_KEY') || null;
-  const publicApiUrl = raw('PUBLIC_API_URL') || null;
+  const publicApiUrl = resolvePublicApiUrl(raw('PUBLIC_API_URL'), raw('RENDER_EXTERNAL_HOSTNAME'));
 
   assertNotPlaceholder('JWT_ACCESS_SECRET', jwtAccessSecret, appEnv);
   assertNotPlaceholder('JWT_REFRESH_SECRET', jwtRefreshSecret, appEnv);
