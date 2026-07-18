@@ -1,0 +1,51 @@
+LOUSA Moon Complete Product Recovery
+Version: 1.18.0
+Android versionCode: 109
+QA package: com.lousa.moon.qa
+Architecture: Mobile Only + shared backend API
+Files: 337
+Directories: 94
+
+Included:
+- package.json / package-lock.json
+- android/
+- app/
+- src/
+- assets/
+- plugins/
+- apps/api/
+- Prisma schema and migrations
+- tests/
+- scripts/
+- README_BUILD.md
+- BUILD_ENV.example
+- recovery reports and audit reference
+
+Excluded:
+- node_modules
+- .git
+- .env and secrets
+- android/local.properties
+- APK/AAB/build artifacts
+- embedded admin frontend
+
+Packaged-source verification:
+- TypeScript PASS
+- ESLint PASS
+- Unit 25 suites / 223 tests PASS
+- Contract integration 1 suite / 2 tests PASS
+- Route integrity 28 routes PASS
+- Touch target static guard PASS
+- UI geometry PASS
+- Bottom safe area PASS
+- Mobile Only boundary PASS
+- Android reproducibility static guard PASS
+- OpenAPI 3.0.3 / version 1.18.0 / 42 paths PASS
+
+Not completed in this environment:
+- Prisma engine validation (network EAI_AGAIN)
+- live PostgreSQL integration
+- production payment provider/webhook
+- Android APK build/install
+- Device QA
+- live separate admin/courier integration

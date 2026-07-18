@@ -1,0 +1,86 @@
+{
+  "expo": {
+    "name": "LOUSA MOON",
+    "slug": "lousa-moon",
+    "version": "1.18.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": [
+      "lousamoon",
+      "com.lousa.moon"
+    ],
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lousa.moon",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "LOUSA uses Face ID to protect your personal cycle and wellbeing data.",
+        "NSLocationWhenInUseUsageDescription": "LOUSA uses your location only when you tap “My location” to select a real delivery address."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FFF8F5"
+      },
+      "package": "com.lousa.moon",
+      "permissions": [
+        "VIBRATE",
+        "POST_NOTIFICATIONS",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "versionCode": 109,
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 170,
+          "resizeMode": "contain",
+          "backgroundColor": "#FBF4F7"
+        }
+      ],
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LOUSA needs access to the selected photo so you can set a profile avatar.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#B45A7B",
+          "defaultChannel": "lousa-gentle"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "LOUSA uses your location only when you choose it for delivery."
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      "@maplibre/maplibre-react-native",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

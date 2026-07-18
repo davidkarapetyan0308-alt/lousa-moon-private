@@ -1,0 +1,87 @@
+pluginManagement {
+    def detectNode = {
+        def envNode = System.getenv("NODE_BINARY")
+        def nodeHome = System.getenv("NODE_HOME")
+        def paths = [
+            envNode,
+            nodeHome ? new File(nodeHome, "bin/node").absolutePath : null,
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "node"
+        ].findAll { it }
+        for (candidate in paths) {
+            try {
+                def process = [candidate, "--version"].execute()
+                if (process.waitFor() == 0) return candidate
+            } catch (ignored) {}
+        }
+        throw new GradleException("Node.js was not found. Set NODE_BINARY or add node to PATH.")
+    }
+    def nodeBin = detectNode()
+    def gradlePluginPath = [nodeBin, "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()
+    if (!gradlePluginPath) throw new GradleException("Unable to resolve @react-native/gradle-plugin.")
+    includeBuild(new File(gradlePluginPath).getParentFile().toString())
+}
+plugins { id("com.facebook.react.settings") }
+
+def detectNode = {
+    def envNode = System.getenv("NODE_BINARY")
+    def nodeHome = System.getenv("NODE_HOME")
+    def paths = [
+        envNode,
+        nodeHome ? new File(nodeHome, "bin/node").absolutePath : null,
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+        "node"
+    ].findAll { it }
+    for (candidate in paths) {
+        try {
+            def process = [candidate, "--version"].execute()
+            if (process.waitFor() == 0) return candidate
+        } catch (ignored) {}
+    }
+    throw new GradleException("Node.js was not found. Set NODE_BINARY or add node to PATH.")
+}
+def nodeBin = detectNode()
+
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+  if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
+    ex.autolinkLibrariesFromCommand()
+  } else {
+    def command = [
+      nodeBin,
+      '--no-warnings',
+      '--eval',
+      'require(require.resolve(\'expo-modules-autolinking\', { paths: [require.resolve(\'expo/package.json\')] }))(process.argv.slice(1))',
+      'react-native-config',
+      '--json',
+      '--platform',
+      'android'
+    ].toList()
+    ex.autolinkLibrariesFromCommand(command)
+  }
+}
+
+rootProject.name = 'LOUSA MOON'
+
+dependencyResolutionManagement {
+  versionCatalogs {
+    reactAndroidLibs {
+      def rnPath = [nodeBin, "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()
+      def rnDir = new File(rnPath).getParentFile()
+      from(files(new File(rnDir, "gradle/libs.versions.toml")))
+    }
+  }
+}
+
+def expoPath = [nodeBin, "--print", "require.resolve('expo/package.json')"].execute(null, rootDir).text.trim()
+def expoDir = new File(expoPath).getParentFile()
+println "expoDir: " + expoDir.absolutePath
+println "expo autolink exists: " + new File(expoDir, "scripts/autolinking.gradle").exists()
+
+apply from: new File(expoDir, "scripts/autolinking.gradle");
+useExpoModules()
+
+include ':app'
+def gradlePluginPath = [nodeBin, "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()
+includeBuild(new File(gradlePluginPath).getParentFile())

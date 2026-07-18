@@ -1,0 +1,797 @@
+openapi: 3.0.3
+info:
+  title: LOUSA Sandbox API
+  version: 1.18.0
+  description: >-
+    Backend contract for LOUSA Mobile. Payment remains blocked unless a configured provider is available;
+    cycle facts, delivery data, subscription actions and packing quality are server-controlled.
+servers:
+  - url: http://localhost:4100
+paths:
+  /health:
+    get:
+      summary: Sandbox health check
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, time]
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: lousa-api-sandbox }
+                  time: { type: string, format: date-time }
+  /v1/maps/autocomplete:
+    get:
+      summary: Search real Google Places address predictions
+      parameters:
+        - in: query
+          name: input
+          required: true
+          schema: { type: string, minLength: 3 }
+        - in: query
+          name: language
+          schema: { type: string, enum: [ru, en, hy] }
+        - in: query
+          name: sessionToken
+          schema: { type: string }
+      responses:
+        '200':
+          description: Real address suggestions from Google Places
+        '503': { $ref: '#/components/responses/ApiError' }
+  /v1/maps/place-details:
+    get:
+      summary: Resolve a Google Place ID to coordinates and structured address
+      parameters:
+        - in: query
+          name: placeId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: language
+          schema: { type: string, enum: [ru, en, hy] }
+        - in: query
+          name: sessionToken
+          schema: { type: string }
+      responses:
+        '200':
+          description: Geocoded address
+        '503': { $ref: '#/components/responses/ApiError' }
+  /v1/maps/reverse-geocode:
+    get:
+      summary: Resolve real coordinates to a Google address
+      parameters:
+        - in: query
+          name: latitude
+          required: true
+          schema: { type: number }
+        - in: query
+          name: longitude
+          required: true
+          schema: { type: number }
+        - in: query
+          name: language
+          schema: { type: string, enum: [ru, en, hy] }
+      responses:
+        '200':
+          description: Reverse-geocoded address
+        '404': { $ref: '#/components/responses/ApiError' }
+        '503': { $ref: '#/components/responses/ApiError' }
+  /v1/delivery/check-zone:
+    post:
+      summary: Check whether real coordinates are inside the Gyumri delivery zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number }
+                longitude: { type: number }
+      responses:
+        '200':
+          description: Delivery zone, fee and ETA
+  /v1/delivery-addresses:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List saved delivery addresses
+      responses:
+        '200':
+          description: Saved addresses
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Save a coordinate-verified delivery address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeliveryAddress' }
+      responses:
+        '201':
+          description: Saved and server-validated address
+        '400': { $ref: '#/components/responses/ApiError' }
+        '401': { $ref: '#/components/responses/ApiError' }
+  /v1/delivery-addresses/{addressId}:
+    patch:
+      security: [{ bearerAuth: [] }]
+      summary: Update an existing delivery address and revalidate its zone
+      parameters:
+        - in: path
+          name: addressId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeliveryAddress' }
+      responses:
+        '200': { description: Updated, server-validated address }
+        '404': { $ref: '#/components/responses/ApiError' }
+    delete:
+      security: [{ bearerAuth: [] }]
+      summary: Delete one of the authenticated user's delivery addresses
+      parameters:
+        - in: path
+          name: addressId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Address deleted }
+  /v1/cycle/calendar:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Return the authenticated user's private cycle facts and cautious forecast
+      responses:
+        '200': { description: Private calendar data; never included in courier/admin delivery DTOs }
+  /v1/cycle/recalculate:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Recalculate a cautious cycle forecast from confirmed records
+      responses:
+        '200':
+          description: Recalculated prediction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CyclePrediction' }
+  /v1/cycle/observations:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List user-confirmed day observations
+      responses:
+        '200': { description: Cycle observations }
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create or replace a user-confirmed day observation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CycleObservation' }
+      responses:
+        '200': { description: Observation saved }
+  /v1/cycle/observations/{observationId}:
+    delete:
+      security: [{ bearerAuth: [] }]
+      summary: Remove a user-confirmed day observation
+      parameters:
+        - in: path
+          name: observationId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Observation deleted }
+  /v1/admin/delivery-addresses:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List delivery-only customer address data for authorized operations roles
+      responses:
+        '200': { description: Delivery addresses without cycle, symptom, mood or private-note data }
+  /v1/admin/delivery-map:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Return delivery-only map points for authorized operations roles
+      responses:
+        '200': { description: Delivery map points with explicit privacy boundary }
+  /v1/admin/customers/{customerId}/delivery-profile:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Return a delivery-only customer profile for operations
+      parameters:
+        - in: path
+          name: customerId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Contact, plan and delivery details; private health data excluded }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/google:
+    post:
+      summary: Verify a Google ID token and create or sign in a sandbox user
+      description: The token signature, expiry, issuer, audience and verified email are checked by google-auth-library.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idToken]
+              properties:
+                idToken: { type: string }
+      responses:
+        '200':
+          description: Google account linked and LOUSA session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/ApiError' }
+        '401': { $ref: '#/components/responses/ApiError' }
+        '429': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/register:
+    post:
+      summary: Start email registration
+      description: Generates a random one-time code and sends it through the configured email provider. The code is never returned to the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, minLength: 1 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                language: { type: string, enum: [ru, en, hy] }
+      responses:
+        '202':
+          description: Verification is pending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expiresAt: { type: string, format: date-time }
+                  resendAfterSeconds: { type: integer, example: 60 }
+        '400': { $ref: '#/components/responses/ApiError' }
+        '409': { $ref: '#/components/responses/ApiError' }
+        '429': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/verify-email:
+    post:
+      summary: Verify email registration with a one-time code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, pattern: '^\d{6}$', example: '482913' }
+      responses:
+        '201':
+          description: Verified account and session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/refresh:
+    post:
+      summary: Rotate an in-memory sandbox refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Rotated sandbox session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/password-reset/request:
+    post:
+      summary: Request a password reset code
+      description: Sends a random one-time code when the account exists, while returning a generic response to prevent account enumeration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: Request accepted
+  /v1/auth/password-reset/confirm:
+    post:
+      summary: Replace a password after one-time-code verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, newPassword]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, pattern: '^\d{6}$', example: '482913' }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        '200': { description: Password updated and sessions revoked }
+        '400': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/login:
+    post:
+      summary: Sign in to the in-memory demo account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sandbox session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401': { $ref: '#/components/responses/ApiError' }
+        '429': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/logout:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Revoke the current in-memory token
+      responses:
+        '200':
+          description: Logged out
+  /v1/auth/logout-all:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Revoke all in-memory access and refresh sessions for the current user
+      responses:
+        '200': { description: All sessions revoked }
+        '401': { $ref: '#/components/responses/ApiError' }
+  /v1/auth/sessions:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List current in-memory access sessions
+      responses:
+        '200':
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        createdAt: { type: string, format: date-time }
+                        expiresAt: { type: string, format: date-time }
+                        sandbox: { type: boolean, example: true }
+        '401': { $ref: '#/components/responses/ApiError' }
+  /v1/profile:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Read the sandbox profile
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  email: { type: string, format: email }
+                  name: { type: string }
+                  demo: { type: boolean, example: true }
+        '401': { $ref: '#/components/responses/ApiError' }
+  /v1/periods:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List period records
+      responses:
+        '200':
+          description: Period records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PeriodRecord' }
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create or replace a period record in sandbox memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeriodRecordInput' }
+      responses:
+        '201':
+          description: Saved period
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PeriodRecord' }
+        '400': { $ref: '#/components/responses/ApiError' }
+  /v1/periods/{periodId}:
+    delete:
+      security: [{ bearerAuth: [] }]
+      summary: Delete a sandbox period
+      parameters:
+        - in: path
+          name: periodId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /v1/prediction:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Calculate a calendar estimate from saved sandbox periods
+      description: The response is not a diagnosis, contraception or confirmation of ovulation.
+      responses:
+        '200':
+          description: Cycle prediction
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CyclePrediction' }
+  /v1/box/preferences:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Read sandbox box preferences
+      responses:
+        '200': { description: Preferences }
+    put:
+      security: [{ bearerAuth: [] }]
+      summary: Store sandbox box preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Preferences saved }
+  /v1/subscription:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Read the server subscription state
+      responses:
+        '200': { description: Subscription or null }
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Activate a subscription from a paid order
+      responses:
+        '200': { description: Active subscription }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /v1/orders:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List authenticated user's orders
+      responses:
+        '200': { description: Orders }
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create one idempotent order from an unused valid quote
+      responses:
+        '200': { description: Existing or newly created order }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /v1/orders/{orderId}/feedback:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Store feedback for a sandbox order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201': { description: Feedback saved in sandbox memory }
+        '404': { $ref: '#/components/responses/ApiError' }
+  /v1/payments/intents:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create a sandbox payment intent
+      description: No money is charged.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, amountMinor]
+              properties:
+                orderId: { type: string }
+                amountMinor: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Sandbox intent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+        '400': { $ref: '#/components/responses/ApiError' }
+  /v1/payments/intents/{intentId}/confirm:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Confirm with the sandbox card
+      description: No money is charged.
+      parameters:
+        - in: path
+          name: intentId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paymentMethodId: { type: string, example: sandbox-card-4242 }
+      responses:
+        '200':
+          description: Confirmed sandbox intent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentIntent' }
+  /v1/payments/intents/{intentId}/refund:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create a full or partial sandbox refund
+      description: No real money is moved.
+      parameters:
+        - in: path
+          name: intentId
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amountMinor: { type: integer, minimum: 1 }
+                reason: { type: string }
+      responses:
+        '201':
+          description: Sandbox refund created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  paymentIntentId: { type: string }
+                  amountMinor: { type: integer }
+                  status: { type: string }
+                  demo: { type: boolean, example: true }
+  /v1/cycle/settings:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Read versioned private cycle settings and questionnaire context
+      responses:
+        '200': { description: Cycle settings for the authenticated user }
+    put:
+      security: [{ bearerAuth: [] }]
+      summary: Save validated cycle settings and questionnaire context
+      responses:
+        '200': { description: Settings saved with server revision }
+        '400': { $ref: '#/components/responses/ApiError' }
+  /v1/orders/quote:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create a server-authoritative Box quote
+      description: Delivery is included in the plan. Allergens, stock, address verification and substitution consent are validated before checkout.
+      responses:
+        '200': { description: Expiring quote with validation errors and warnings }
+  /v1/subscription/actions:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Pause, resume, skip or cancel an active subscription on the server
+      responses:
+        '200': { description: Updated subscription }
+        '409': { $ref: '#/components/responses/ApiError' }
+  /v1/admin/quality/suppliers:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create a traceable product supplier for the separate admin program
+      responses:
+        '201': { description: Supplier created }
+  /v1/admin/quality/batches:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Register a lot, expiry date, certificates and QA status
+      responses:
+        '201': { description: Product batch created }
+  /v1/admin/quality/batches/{batchId}/release:
+    patch:
+      security: [{ bearerAuth: [] }]
+      summary: Release or reject a product batch after QA review
+      parameters:
+        - in: path
+          name: batchId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Batch QA state updated }
+  /v1/admin/packing/{orderId}/quality-record:
+    put:
+      security: [{ bearerAuth: [] }]
+      summary: Save sealed packing traceability before courier release
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Packing quality record saved }
+        '409': { $ref: '#/components/responses/ApiError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-sandbox-token
+  responses:
+    ApiError:
+      description: API error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, example: demo@lousa.app }
+        password: { type: string, example: Lousa2026 }
+    LoginResponse:
+      type: object
+      required: [user, accessToken, refreshToken, demo]
+      properties:
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            email: { type: string, format: email }
+            name: { type: string }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        demo: { type: boolean, example: true }
+    PeriodRecordInput:
+      type: object
+      required: [startDate]
+      properties:
+        id: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date, nullable: true }
+        confirmed: { type: boolean }
+        flowByDay: { type: object, additionalProperties: { type: string } }
+        painByDay: { type: object, additionalProperties: { type: number } }
+        productsUsedByDay: { type: object, additionalProperties: { type: number } }
+        nightLeakageByDay: { type: object, additionalProperties: { type: boolean } }
+    PeriodRecord:
+      allOf:
+        - $ref: '#/components/schemas/PeriodRecordInput'
+        - type: object
+          required: [id, source, createdAt, updatedAt]
+          properties:
+            source: { type: string, enum: [user, imported, legacy, demo] }
+            needsReview: { type: boolean }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    CyclePrediction:
+      type: object
+      properties:
+        mostLikelyStart: { type: string, format: date, nullable: true }
+        earliestStart: { type: string, format: date, nullable: true }
+        latestStart: { type: string, format: date, nullable: true }
+        confidence: { type: string, enum: [insufficient, low, medium, high] }
+        confidenceScore: { type: number }
+        reasons: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+        isCalendarEstimateOnly: { type: boolean, example: true }
+    CycleObservation:
+      type: object
+      required: [date, type]
+      properties:
+        id: { type: string }
+        date: { type: string, format: date }
+        type: { type: string, enum: [period_start, period_day, period_end, spotting, no_bleeding] }
+        source: { type: string, enum: [user, imported] }
+        periodRecordId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DeliveryAddress:
+      type: object
+      required: [street, house, latitude, longitude, formattedAddress]
+      properties:
+        id: { type: string }
+        label: { type: string, enum: [home, work, other] }
+        addressType: { type: string, enum: [apartment, private_house, office, workplace, hotel, other] }
+        handoffType: { type: string, enum: [hand_to_recipient, leave_at_door, leave_with_reception, leave_with_security, call_on_arrival, other] }
+        country: { type: string }
+        region: { type: string }
+        city: { type: string }
+        district: { type: string }
+        street: { type: string }
+        house: { type: string }
+        entrance: { type: string }
+        floor: { type: string }
+        apartment: { type: string }
+        postalCode: { type: string }
+        intercomCode: { type: string }
+        instructions: { type: string }
+        companyName: { type: string }
+        contactPerson: { type: string }
+        officeNumber: { type: string }
+        hotelName: { type: string }
+        roomNumber: { type: string }
+        landmark: { type: string }
+        gateDetails: { type: string }
+        leaveAtDoorLocation: { type: string }
+        callOnArrival: { type: boolean }
+        doNotKnock: { type: boolean }
+        photoConfirmation: { type: boolean }
+        recipientName: { type: string }
+        phone: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        formattedAddress: { type: string }
+        provider: { type: string, enum: [google, maptiler, device, manual] }
+        providerPlaceId: { type: string, nullable: true }
+        deliveryZoneId: { type: string, nullable: true }
+        deliveryFeeMinor: { type: integer, nullable: true }
+        estimatedMinutes: { type: integer, nullable: true }
+        validationStatus: { type: string, enum: [unverified, verified, outside_zone] }
+        deliveryIncludedInPlan: { type: boolean, example: true }
+        planCode: { type: string, nullable: true }
+        zoneVerifiedAt: { type: string, format: date-time, nullable: true }
+        syncStatus: { type: string, enum: [synced, pending, failed] }
+        isDefault: { type: boolean }
+    PaymentIntent:
+      type: object
+      properties:
+        id: { type: string }
+        orderId: { type: string }
+        amountMinor: { type: integer }
+        currency: { type: string, example: AMD }
+        status: { type: string }
+        demo: { type: boolean, example: true }

@@ -1,0 +1,1 @@
+export { firebaseAuthService } from './firebaseAuth';

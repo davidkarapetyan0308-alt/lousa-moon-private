@@ -1,0 +1,10 @@
+{
+  "name": "@lousa/api-sandbox",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "description": "Local sandbox API. It is not a production backend and uses in-memory storage."
+}

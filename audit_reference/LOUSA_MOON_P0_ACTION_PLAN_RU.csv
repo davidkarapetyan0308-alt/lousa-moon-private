@@ -1,0 +1,32 @@
+ID;Область;Критическая проблема;Что сделать;Критерий приемки
+P0-01;Onboarding;Пропуск анкеты создает выдуманную дату 13 дней назад;Сделать selectedDate nullable и при Skip сохранять ноль записей;После Skip periodRecords пуст, день/фаза/прогноз не отображаются
+P0-02;Cycle store;lastPeriodStart имеет выдуманный fallback;Сделать поле nullable и вычислять только из подтвержденных записей;Ни один экран не показывает цикл без данных
+P0-03;Cycle data;Нет единого валидатора period records;Внедрить validateAndNormalizePeriodRecord в UI/store/API;Все команды используют один валидатор
+P0-04;Cycle data;Можно создать future/overlap/impossible period;Запретить будущие даты, пересечения и невалидную длительность;Негативные unit/integration тесты проходят
+P0-05;Cycle editing;Destructive действия имеют неожиданный эффект;Показывать preview, подтверждение и durable Undo;Удаление start/end/no bleeding не теряет данные неожиданно
+P0-06;Cycle sync;Локальные правки и сервер могут расходиться;Добавить revision/serverVersion/queue/conflict handling;Offline edit/delete/reconnect дает одинаковую историю
+P0-07;Cycle context;Onboarding всегда записывает natural/none;Спросить postpartum/breastfeeding/perimenopause/contraception;Прогноз подавляется или расширяется для каждого контекста
+P0-08;Assistant;Luna выдается за AI, но является regex-ответчиком;Удалить из production или переименовать в заранее подготовленную помощь;В release нет ложного AI/персонализации
+P0-09;Routing;Кнопка Privacy ведет на отсутствующий route;Использовать /screens/legal?document=privacy и добавить route test;Все интерактивные routes существуют
+P0-10;Security copy;Экран обещает защищенное health storage, но используется AsyncStorage;Исправить текст до фактического уровня защиты;Copy соответствует реализации
+P0-11;Local security;Health/address данные не зашифрованы;Перенести в encrypted storage с ключом Keystore;Извлечение app data не раскрывает содержимое
+P0-12;Account rights;Локальная очистка может восприниматься как удаление аккаунта;Разделить Clear this device и Delete server account;Оба E2E сценария работают и объяснены
+P0-13;Commerce;Нет обязательного server quote;Блокировать review/confirm без действующего quote ID;Quote получен сервером и имеет expiry/catalog version
+P0-14;Commerce;Order создается локально;Создавать order только через backend из quote ID с idempotency key;Order виден в БД и отдельной admin-panel
+P0-15;Payments;Нет production payment flow;Подключить payment intent, подтверждение, webhook, refund/idempotency;Полный sandbox/certification flow зеленый
+P0-16;Subscription;Pause/skip/cancel локальные;Сделать команды серверными с pending/error state;Состояние одинаково на двух устройствах
+P0-17;Box defaults;Optional extras могут быть включены без явного выбора;Все optional/paid extras по умолчанию выключены;Fresh install не добавляет extras
+P0-18;Allergies;Аллергии хранятся свободным текстом;Добавить структурированный аллерген, тип, severity и substitution policy;Packing не подбирает конфликтный SKU
+P0-19;Inventory;Reservation может oversell при конкуренции;Атомарная условная резервация/serializable transaction;Concurrent order stress test не превышает stock
+P0-20;Box truth;Локальный order может выглядеть как реальная логистика;Показывать Draft до server events;Ни один статус preparing/on-the-way не создается frontend
+P0-21;Delivery sync;Нет живого доказательства mobile->DB->admin;Создать E2E окружение и тест сохранения адреса/заказа;Admin видит точку, имя, телефон, тариф и updatedAt
+P0-22;Privacy roles;Courier/admin payload может быть неверно настроен;Field allow-list и authorization tests;В ответах нет cycle/symptoms/mood/notes
+P0-23;Physical quality;Нет supplier/batch/expiry/QA/recall трассировки;Расширить catalog/inventory/order item quality models;Любой товар прослеживается до партии и поставщика
+P0-24;Substitution;Нет явного разрешения на замену;Добавить per-item substitution rules и approval;Чувствительный товар не заменяется без согласия
+P0-25;Internal routes;UX Lab/internal routes присутствуют в production tree;Ввести release route allow-list/build exclusion;В release bundle отсутствуют internal routes
+P0-26;Lint;ESLint завершается ошибкой;Исправить ESM/__dirname конфигурацию;npm run lint -- --quiet exit 0
+P0-27;Unit tests;Stale test ищет удаленную admin-panel;Заменить на mobile-only/API contract test;npm test exit 0, все suites зеленые
+P0-28;Integration;Текущий integration тест не запускает реальную БД;Добавить PostgreSQL/testcontainers и реальные API flows;Auth/cycle/address/quote/order/payment пишут и читают реальные записи
+P0-29;APK;Последняя версия не собрана в текущей проверке;Собрать чистый QA/release APK и проверить signer/package/bundle;BUILD SUCCESSFUL, APK работает без Metro
+P0-30;Device QA;Нет проверки последнего UI на Android;Выполнить полный checklist на Samsung и нескольких размерах;Есть скриншоты/видео/logs по каждому P0 сценарию
+P0-31;Release;Нет настоящего operational/payment proof;Не выпускать до live smoke mobile/backend/admin/payment;Release checklist подписан ответственными
