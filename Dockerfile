@@ -10,6 +10,7 @@ COPY packages ./packages
 COPY src ./src
 COPY tsconfig.json ./tsconfig.json
 COPY scripts/start-production-api.sh ./scripts/start-production-api.sh
+COPY scripts/ensure-auth-db-schema.js ./scripts/ensure-auth-db-schema.js
 
 RUN npm run prisma:generate \
   && chmod +x ./scripts/start-production-api.sh \

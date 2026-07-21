@@ -2042,16 +2042,17 @@ async function router(req: AuthedRequest, res: ServerResponse) {
 
   if (method === 'GET' && pathname === '/health') {
     let databaseAuthSchemaConfigured = false;
+    let databaseAuthSchemaTables: JsonObject = {};
     if (env.databaseUrl) {
       try {
         const rows = await prisma.$queryRawUnsafe(`
           SELECT
-            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'User')
-            AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthIdentity')
-            AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Session')
-            AS ok
-        `) as Array<{ ok: boolean }>;
-        databaseAuthSchemaConfigured = Boolean(rows?.[0]?.ok);
+            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'User') AS "user",
+            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthIdentity') AS "authIdentity",
+            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Session') AS "session"
+        `) as Array<{ user: boolean; authIdentity: boolean; session: boolean }>;
+        databaseAuthSchemaTables = rows?.[0] || {};
+        databaseAuthSchemaConfigured = Boolean(rows?.[0]?.user && rows?.[0]?.authIdentity && rows?.[0]?.session);
       } catch (error) {
         console.error('[health] auth schema check failed', error);
       }
@@ -2063,6 +2064,7 @@ async function router(req: AuthedRequest, res: ServerResponse) {
       appEnv: env.appEnv,
       databaseConfigured: Boolean(env.databaseUrl),
       databaseAuthSchemaConfigured,
+      databaseAuthSchemaTables,
       redisConfigured: Boolean(env.redisUrl),
       redisRequired: env.requireRedis,
       firebaseProjectConfigured: Boolean(env.firebaseProjectId),
