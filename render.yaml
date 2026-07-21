@@ -21,7 +21,7 @@ services:
       - key: PORT
         value: "10000"
       - key: PUBLIC_API_URL
-        value: https://lousa-moon-api-fuoo.onrender.com
+        value: https://lousa-moon-api.onrender.com
       - key: DATABASE_URL
         sync: false
       - key: MIGRATION_DATABASE_URL
