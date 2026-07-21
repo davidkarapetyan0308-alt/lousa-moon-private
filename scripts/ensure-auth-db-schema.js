@@ -2,7 +2,7 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
-const root = path.resolve(__dirname, '..');
+const root = process.cwd();
 const prismaBin = path.join(root, 'node_modules', '.bin', 'prisma');
 const schemaPath = path.join(root, 'apps', 'api', 'prisma', 'schema.prisma');
 
