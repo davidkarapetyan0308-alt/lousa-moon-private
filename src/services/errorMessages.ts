@@ -2,6 +2,8 @@ import type { ServiceError } from './contracts';
 
 const USER_MESSAGES: Record<string, string> = {
   NETWORK_ERROR: 'Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.',
+  SERVER_ERROR: 'Сервер временно не смог обработать вход. Попробуйте ещё раз через минуту.',
+  AUTH_DATABASE_UNAVAILABLE: 'Вход временно недоступен: сервер обновляет базу данных. Попробуйте ещё раз через минуту.',
   GOOGLE_AUTH_NOT_CONFIGURED: 'Google-вход не настроен для этой сборки. Проверьте OAuth client ID, package name и SHA-1.',
   GOOGLE_TOKEN_INVALID: 'Не удалось подтвердить Google-аккаунт на сервере.',
   GOOGLE_TOKEN_REQUIRED: 'Google не вернул токен входа. Попробуйте ещё раз.',

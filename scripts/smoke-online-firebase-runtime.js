@@ -21,6 +21,13 @@ async function main() {
   if (!healthResponse.ok || !health?.ok) {
     fail('Backend /health is not OK.', [`HTTP ${healthResponse.status}`, JSON.stringify(health)]);
   }
+  if (!health.databaseConfigured) fail('Backend has no database configured.');
+  if (health.databaseAuthSchemaConfigured !== true) {
+    fail('Backend auth database schema is not migrated.', [
+      'Expected /health.databaseAuthSchemaConfigured to be true.',
+      JSON.stringify(health),
+    ]);
+  }
   if (!health.firebaseProjectConfigured) fail('Backend has no Firebase project configured.');
   if (!health.firebaseAdminConfigured && !health.firebaseRestConfigured) {
     fail('Backend cannot verify Firebase tokens.', [

@@ -216,6 +216,7 @@ function errorResponse(req: IncomingMessage, res: ServerResponse, error: unknown
     json(req, res, error.status, { error: { code: error.code, message: error.message, details: error.details, requestId } });
     return;
   }
+  console.error('[api] unhandled request error', { requestId, error });
   const message = env.appEnv === 'production' ? 'Server error.' : error instanceof Error ? error.message : 'Unknown server error.';
   json(req, res, 500, { error: { code: 'SERVER_ERROR', message, requestId } });
 }
@@ -323,48 +324,53 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
   const displayName = str(profile.name || decoded.name || (email ? email.split('@')[0] : 'LOUSA'), 120) || 'LOUSA';
   const avatarUri = optionalStr(decoded.picture, 500);
 
-  const identity = await (prisma as any).authIdentity.findUnique({
-    where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
-    include: { user: true },
-  });
-  let user = identity?.user || null;
-  let isNewUser = false;
-
-  if (!user && email) user = await (prisma as any).user.findUnique({ where: { email } });
-  if (!user && phone) user = await (prisma as any).user.findFirst({ where: { phone, deletedAt: null } });
-
-  if (!user) {
-    user = await (prisma as any).user.create({
-      data: {
-        email: email || firebaseSyntheticEmail(firebaseUid),
-        emailVerifiedAt: decoded.email_verified ? now() : null,
-        phone,
-        name: displayName,
-        language: language(profile.language),
-        status: 'active',
-      },
+  try {
+    const identity = await (prisma as any).authIdentity.findUnique({
+      where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
+      include: { user: true },
     });
-    isNewUser = true;
-  } else {
-    const updates: JsonObject = { status: user.status === 'pending' ? 'active' : user.status };
-    if (decoded.email_verified && !user.emailVerifiedAt) updates.emailVerifiedAt = now();
-    if (phone && !user.phone) updates.phone = phone;
-    if (displayName && (!user.name || user.name === 'LOUSA')) updates.name = displayName;
-    if (Object.keys(updates).length) user = await (prisma as any).user.update({ where: { id: user.id }, data: updates });
+    let user = identity?.user || null;
+    let isNewUser = false;
+
+    if (!user && email) user = await (prisma as any).user.findUnique({ where: { email } });
+    if (!user && phone) user = await (prisma as any).user.findFirst({ where: { phone, deletedAt: null } });
+
+    if (!user) {
+      user = await (prisma as any).user.create({
+        data: {
+          email: email || firebaseSyntheticEmail(firebaseUid),
+          emailVerifiedAt: decoded.email_verified ? now() : null,
+          phone,
+          name: displayName,
+          language: language(profile.language),
+          status: 'active',
+        },
+      });
+      isNewUser = true;
+    } else {
+      const updates: JsonObject = { status: user.status === 'pending' ? 'active' : user.status };
+      if (decoded.email_verified && !user.emailVerifiedAt) updates.emailVerifiedAt = now();
+      if (phone && !user.phone) updates.phone = phone;
+      if (displayName && (!user.name || user.name === 'LOUSA')) updates.name = displayName;
+      if (Object.keys(updates).length) user = await (prisma as any).user.update({ where: { id: user.id }, data: updates });
+    }
+
+    await (prisma as any).authIdentity.upsert({
+      where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
+      update: { providerEmail: email || null },
+      create: { userId: user.id, provider: 'firebase', providerSubject: firebaseUid, providerEmail: email || null },
+    });
+    await (prisma as any).authIdentity.upsert({
+      where: { provider_providerSubject: { provider: `firebase:${provider}`, providerSubject: firebaseUid } },
+      update: { providerEmail: email || null },
+      create: { userId: user.id, provider: `firebase:${provider}`, providerSubject: firebaseUid, providerEmail: email || null },
+    }).catch(() => null);
+
+    return sessionPayload(user, req, { isNewUser, firebaseUid, authProvider: 'firebase' });
+  } catch (error) {
+    console.error('[firebase-auth] session database persistence failed', error);
+    throw new ApiError(503, 'AUTH_DATABASE_UNAVAILABLE', 'Auth database is temporarily unavailable.');
   }
-
-  await (prisma as any).authIdentity.upsert({
-    where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
-    update: { providerEmail: email || null },
-    create: { userId: user.id, provider: 'firebase', providerSubject: firebaseUid, providerEmail: email || null },
-  });
-  await (prisma as any).authIdentity.upsert({
-    where: { provider_providerSubject: { provider: `firebase:${provider}`, providerSubject: firebaseUid } },
-    update: { providerEmail: email || null },
-    create: { userId: user.id, provider: `firebase:${provider}`, providerSubject: firebaseUid, providerEmail: email || null },
-  }).catch(() => null);
-
-  return sessionPayload(user, req, { isNewUser, firebaseUid, authProvider: 'firebase' });
 }
 
 async function ensureDemoUser() {
@@ -2035,12 +2041,28 @@ async function router(req: AuthedRequest, res: ServerResponse) {
   const method = req.method || 'GET';
 
   if (method === 'GET' && pathname === '/health') {
+    let databaseAuthSchemaConfigured = false;
+    if (env.databaseUrl) {
+      try {
+        const rows = await prisma.$queryRawUnsafe(`
+          SELECT
+            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'User')
+            AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthIdentity')
+            AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Session')
+            AS ok
+        `) as Array<{ ok: boolean }>;
+        databaseAuthSchemaConfigured = Boolean(rows?.[0]?.ok);
+      } catch (error) {
+        console.error('[health] auth schema check failed', error);
+      }
+    }
     return json(req, res, 200, {
       ok: true,
       version: '2.0.0-admin-ops',
       build: 120,
       appEnv: env.appEnv,
       databaseConfigured: Boolean(env.databaseUrl),
+      databaseAuthSchemaConfigured,
       redisConfigured: Boolean(env.redisUrl),
       redisRequired: env.requireRedis,
       firebaseProjectConfigured: Boolean(env.firebaseProjectId),

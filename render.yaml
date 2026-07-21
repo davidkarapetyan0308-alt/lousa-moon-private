@@ -15,7 +15,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: RUN_MIGRATIONS_ON_START
-        value: "false"
+        value: "true"
       - key: API_HOST
         value: 0.0.0.0
       - key: PORT
