@@ -94,9 +94,6 @@ function serviceAccountFromEnv(env: ApiEnv) {
 export async function verifyFirebaseIdToken(env: ApiEnv, idToken: string): Promise<FirebaseDecodedToken> {
   if (!idToken) throw new FirebaseAdminNotConfiguredError('Firebase ID token is required.');
   if (!hasAdminCredentials(env)) {
-    if (env.appEnv === 'production') {
-      throw new FirebaseAdminNotConfiguredError('Firebase Admin credentials are missing.');
-    }
     return verifyFirebaseIdTokenViaRest(env, idToken);
   }
   if (!cachedAuth) {

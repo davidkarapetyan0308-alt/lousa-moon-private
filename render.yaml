@@ -38,6 +38,8 @@ services:
         value: firebase
       - key: FIREBASE_PROJECT_ID
         value: lousa-moon
+      - key: FIREBASE_WEB_API_KEY
+        value: AIzaSyD3ujoie7meBqxb6SmUebp_LIIudMvPnGA
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: EMAIL_PROVIDER

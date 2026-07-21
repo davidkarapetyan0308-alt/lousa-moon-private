@@ -108,8 +108,13 @@ export function loadApiEnv(): ApiEnv {
     if (paymentProvider !== 'sandbox' && !paymentSecretKey) throw new Error('PAYMENT_SECRET_KEY is required for non-sandbox payments.');
     if (authProvider === 'firebase') {
       if (!firebaseProjectId) throw new Error('FIREBASE_PROJECT_ID is required when AUTH_PROVIDER=firebase.');
-      if (!firebaseServiceAccountJson && !firebaseApplicationCredentials && !(firebaseClientEmail && firebasePrivateKey)) {
-        throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON, GOOGLE_APPLICATION_CREDENTIALS, or FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY is required when AUTH_PROVIDER=firebase.');
+      if (
+        !firebaseWebApiKey &&
+        !firebaseServiceAccountJson &&
+        !firebaseApplicationCredentials &&
+        !(firebaseClientEmail && firebasePrivateKey)
+      ) {
+        throw new Error('FIREBASE_WEB_API_KEY or Firebase Admin credentials are required when AUTH_PROVIDER=firebase.');
       }
     } else {
       throw new Error('AUTH_PROVIDER=legacy is forbidden in production. Use Firebase Auth.');
