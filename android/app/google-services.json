@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "550574274608-nv7fude200k04m9ekcmd80j3hjl8jm3t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lousa.moon",
+            "certificate_hash": "7e6a3034ae34f9b6c1d3234b2a0013453a00d15a"
+          }
+        },
+        {
           "client_id": "550574274608-q2ebi8j7cugrmelab45q521iull9ksug.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -50,6 +58,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "550574274608-dc4btm3o6u6ssffc8mcjsf8cqq8fjuc8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lousa.moon.qa",
+            "certificate_hash": "7e6a3034ae34f9b6c1d3234b2a0013453a00d15a"
+          }
+        },
         {
           "client_id": "550574274608-6qtvg9pbn4go01dv9spt8nnv4lfu65lu.apps.googleusercontent.com",
           "client_type": 3

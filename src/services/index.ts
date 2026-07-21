@@ -14,12 +14,13 @@ export type StartupConfigIssue = {
   details: string;
 };
 
-const APP_MODE = process.env.EXPO_PUBLIC_APP_MODE || 'api';
-const API_URL = process.env.EXPO_PUBLIC_LOUSA_API_URL || '';
-const AUTH_PROVIDER = (process.env.EXPO_PUBLIC_AUTH_PROVIDER || 'firebase') as AuthProviderMode;
+const EXTRA = Constants.expoConfig?.extra || {};
+const APP_MODE = String(EXTRA.appMode || process.env.EXPO_PUBLIC_APP_MODE || 'api');
+const API_URL = String(EXTRA.publicApiUrl || process.env.EXPO_PUBLIC_LOUSA_API_URL || '');
+const AUTH_PROVIDER = String(EXTRA.authProvider || process.env.EXPO_PUBLIC_AUTH_PROVIDER || 'firebase') as AuthProviderMode;
 const FIREBASE_PROJECT_ID = String(Constants.expoConfig?.extra?.firebaseProjectId || '');
 const FIREBASE_APP_ID = String(Constants.expoConfig?.extra?.firebaseAppId || '');
-const IS_RELEASE = process.env.EXPO_PUBLIC_RELEASE_BUILD === 'true';
+const IS_RELEASE = EXTRA.releaseBuild === true || process.env.EXPO_PUBLIC_RELEASE_BUILD === 'true';
 
 /**
  * Returns the configured runtime mode without throwing during module import.

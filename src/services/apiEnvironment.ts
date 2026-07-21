@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 export type ApiEnvironmentStatus = 'ready' | 'missing_api_url' | 'localhost_forbidden' | 'invalid_protocol' | 'insecure_release_api';
 
@@ -9,9 +10,12 @@ export interface ApiEnvironmentCheck {
   message: string | null;
 }
 
-const RAW_API_URL = (process.env.EXPO_PUBLIC_LOUSA_API_URL || '').trim();
+const EXTRA = Constants.expoConfig?.extra || {};
+const RAW_API_URL = String(EXTRA.publicApiUrl || process.env.EXPO_PUBLIC_LOUSA_API_URL || '').trim();
 const RELEASE_BUILD =
+  EXTRA.releaseBuild === true ||
   process.env.EXPO_PUBLIC_RELEASE_BUILD === 'true' ||
+  EXTRA.buildChannel === 'production' ||
   process.env.EXPO_PUBLIC_BUILD_CHANNEL === 'production';
 
 export function getConfiguredApiUrl() {

@@ -1,4 +1,5 @@
 import type { AuthService, ServiceResult, SessionInfo } from '../contracts';
+import Constants from 'expo-constants';
 import { getUserFacingErrorMessage } from '../errorMessages';
 import { assertApiEnvironmentReady } from '../apiEnvironment';
 import { AUTH_TOKEN_KEYS, secureStorage } from '../security/secureStorage';
@@ -14,7 +15,9 @@ type PhoneConfirmation = { confirm(code: string): Promise<{ user?: { getIdToken(
 
 const phoneConfirmations = new Map<string, PhoneConfirmation>();
 
-const FIREBASE_AUTH_ACTION_URL = (process.env.EXPO_PUBLIC_FIREBASE_AUTH_ACTION_URL || '').trim();
+const FIREBASE_AUTH_ACTION_URL = String(
+  Constants.expoConfig?.extra?.firebaseAuthActionUrl || process.env.EXPO_PUBLIC_FIREBASE_AUTH_ACTION_URL || '',
+).trim();
 
 function getFirebaseActionCodeSettings() {
   if (!FIREBASE_AUTH_ACTION_URL) return undefined;

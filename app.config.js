@@ -69,6 +69,12 @@ module.exports = ({ config }) => {
       firebaseWebClientId: firebase.webClientId,
       firebaseAndroidPackage: androidPackage,
       buildVariant,
+      appMode: process.env.EXPO_PUBLIC_APP_MODE || 'api',
+      authProvider: process.env.EXPO_PUBLIC_AUTH_PROVIDER || 'firebase',
+      publicApiUrl: process.env.EXPO_PUBLIC_LOUSA_API_URL || '',
+      firebaseAuthActionUrl: process.env.EXPO_PUBLIC_FIREBASE_AUTH_ACTION_URL || '',
+      releaseBuild: process.env.EXPO_PUBLIC_RELEASE_BUILD === 'true',
+      buildChannel: process.env.EXPO_PUBLIC_BUILD_CHANNEL || buildVariant,
     },
     scheme: Array.from(new Set([...(Array.isArray(config.scheme) ? config.scheme : [config.scheme].filter(Boolean)), androidPackage])),
     android: {
