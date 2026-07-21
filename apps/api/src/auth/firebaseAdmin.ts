@@ -96,13 +96,21 @@ export async function verifyFirebaseIdToken(env: ApiEnv, idToken: string): Promi
   if (!hasAdminCredentials(env)) {
     return verifyFirebaseIdTokenViaRest(env, idToken);
   }
-  if (!cachedAuth) {
-    const existing = getApps()[0];
-    const credential = env.firebaseApplicationCredentials
-      ? applicationDefault()
-      : cert(serviceAccountFromEnv(env) as any);
-    const app = existing || initializeApp({ credential, projectId: env.firebaseProjectId || undefined });
-    cachedAuth = getAuth(app);
+  try {
+    if (!cachedAuth) {
+      const existing = getApps()[0];
+      const credential = env.firebaseApplicationCredentials
+        ? applicationDefault()
+        : cert(serviceAccountFromEnv(env) as any);
+      const app = existing || initializeApp({ credential, projectId: env.firebaseProjectId || undefined });
+      cachedAuth = getAuth(app);
+    }
+    return cachedAuth.verifyIdToken(idToken, true) as Promise<FirebaseDecodedToken>;
+  } catch (error) {
+    if (env.firebaseWebApiKey && env.firebaseProjectId) {
+      console.warn('[firebase-auth] Firebase Admin verification failed; retrying via Firebase REST fallback.', error);
+      return verifyFirebaseIdTokenViaRest(env, idToken);
+    }
+    throw error;
   }
-  return cachedAuth.verifyIdToken(idToken, true) as Promise<FirebaseDecodedToken>;
 }

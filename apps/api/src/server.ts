@@ -306,7 +306,7 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
     decoded = await verifyFirebaseIdToken(env, idToken);
   } catch (error) {
     if (error instanceof FirebaseAdminNotConfiguredError) {
-      throw new ApiError(503, 'FIREBASE_ADMIN_NOT_CONFIGURED', 'Firebase Admin SDK не настроен на backend. Добавьте FIREBASE_SERVICE_ACCOUNT_JSON или service account env.');
+      throw new ApiError(503, 'FIREBASE_AUTH_BACKEND_UNAVAILABLE', 'Firebase token verification is temporarily unavailable.');
     }
     console.error('[firebase-auth] verify id token failed', error);
     throw new ApiError(401, 'FIREBASE_ID_TOKEN_INVALID', 'Firebase session could not be verified.');
