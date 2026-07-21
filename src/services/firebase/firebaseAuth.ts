@@ -11,6 +11,13 @@ const fail = <T>(code: string, message: string, recoverable = false, details?: R
 });
 
 type NativeFirebaseAuth = any;
+type NativeFirebaseUser = {
+  uid?: string;
+  email?: string | null;
+  phoneNumber?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+};
 type PhoneConfirmation = { confirm(code: string): Promise<{ user?: { getIdToken(forceRefresh?: boolean): Promise<string> } }> };
 
 const phoneConfirmations = new Map<string, PhoneConfirmation>();
@@ -129,7 +136,51 @@ async function request<T>(path: string, body: Record<string, unknown>): Promise<
   }
 }
 
-async function exchangeFirebaseIdToken(idToken: string, provider: string, profile: Record<string, unknown> = {}): Promise<ServiceResult<SessionInfo>> {
+function isTransientSessionExchangeError(code: string) {
+  return (
+    code === 'SERVER_ERROR' ||
+    code === 'AUTH_DATABASE_UNAVAILABLE' ||
+    code === 'FIREBASE_AUTH_BACKEND_UNAVAILABLE' ||
+    code === 'NETWORK_ERROR' ||
+    code.startsWith('HTTP_5')
+  );
+}
+
+async function createFirebaseFallbackSession(
+  idToken: string,
+  provider: string,
+  user?: NativeFirebaseUser | null,
+): Promise<ServiceResult<SessionInfo>> {
+  const userId = String(user?.uid || '').trim();
+  if (!userId) {
+    return fail('FIREBASE_FALLBACK_USER_MISSING', 'Firebase вошёл, но профиль пользователя не найден. Повторите вход.', true);
+  }
+
+  const refreshToken = `firebase:${provider}:${userId}`;
+  await secureStorage.set('accessToken', idToken);
+  await secureStorage.set('refreshToken', refreshToken);
+  await secureStorage.set('sessionId', userId);
+
+  return ok({
+    userId,
+    sessionId: userId,
+    accessToken: idToken,
+    refreshToken,
+    demo: false,
+    email: user?.email || undefined,
+    phone: user?.phoneNumber || undefined,
+    name: user?.displayName || undefined,
+    avatarUri: user?.photoURL ?? null,
+    isNewUser: false,
+  });
+}
+
+async function exchangeFirebaseIdToken(
+  idToken: string,
+  provider: string,
+  profile: Record<string, unknown> = {},
+  fallbackUser?: NativeFirebaseUser | null,
+): Promise<ServiceResult<SessionInfo>> {
   const result = await request<{
     user: { id: string; email?: string; phone?: string; name?: string; avatarUri?: string | null };
     accessToken: string;
@@ -137,7 +188,13 @@ async function exchangeFirebaseIdToken(idToken: string, provider: string, profil
     demo?: boolean;
     isNewUser?: boolean;
   }>('/v1/auth/firebase/session', { idToken, provider, profile });
-  if (!result.ok) return result;
+  if (!result.ok) {
+    if (isTransientSessionExchangeError(result.error.code)) {
+      if (__DEV__) console.warn('[LOUSA Firebase] backend session exchange failed; using Firebase fallback session', result.error.code);
+      return createFirebaseFallbackSession(idToken, provider, fallbackUser);
+    }
+    return result;
+  }
   await secureStorage.set('accessToken', result.data.accessToken);
   await secureStorage.set('refreshToken', result.data.refreshToken);
   await secureStorage.set('sessionId', result.data.user.id);
@@ -206,7 +263,7 @@ export const firebaseAuthService: AuthService = {
       const idToken = await tokenFromCurrentUser(authOrError, true);
       return exchangeFirebaseIdToken(idToken, 'firebase-password', {
         name: authOrError.currentUser?.displayName || undefined,
-      });
+      }, authOrError.currentUser);
     } catch (error) {
       return firebaseError(error, 'FIREBASE_EMAIL_VERIFY_FAILED') as ServiceResult<SessionInfo>;
     }
@@ -236,7 +293,7 @@ export const firebaseAuthService: AuthService = {
         return fail('FIREBASE_EMAIL_NOT_VERIFIED', 'Сначала подтвердите email по ссылке из письма.') as ServiceResult<SessionInfo>;
       }
       const idToken = await tokenFromCurrentUser(authOrError, true);
-      return exchangeFirebaseIdToken(idToken, 'firebase-password');
+      return exchangeFirebaseIdToken(idToken, 'firebase-password', {}, authOrError.currentUser);
     } catch (error) {
       return firebaseError(error, 'FIREBASE_EMAIL_SIGNIN_FAILED') as ServiceResult<SessionInfo>;
     }
@@ -253,7 +310,7 @@ export const firebaseAuthService: AuthService = {
       const credential = authPackage.GoogleAuthProvider.credential(idToken);
       await authOrError.signInWithCredential(credential);
       const firebaseIdToken = await tokenFromCurrentUser(authOrError, true);
-      return exchangeFirebaseIdToken(firebaseIdToken, 'firebase-google');
+      return exchangeFirebaseIdToken(firebaseIdToken, 'firebase-google', {}, authOrError.currentUser);
     } catch (error) {
       return firebaseError(error, 'FIREBASE_GOOGLE_SIGNIN_FAILED') as ServiceResult<SessionInfo>;
     }
@@ -284,7 +341,7 @@ export const firebaseAuthService: AuthService = {
       await confirmation.confirm(input.code);
       const idToken = await tokenFromCurrentUser(authOrError, true);
       phoneConfirmations.delete(input.phone);
-      return exchangeFirebaseIdToken(idToken, 'firebase-phone');
+      return exchangeFirebaseIdToken(idToken, 'firebase-phone', {}, authOrError.currentUser);
     } catch (error) {
       return firebaseError(error, 'FIREBASE_PHONE_VERIFY_FAILED') as ServiceResult<SessionInfo>;
     }
@@ -324,7 +381,7 @@ export const firebaseAuthService: AuthService = {
     if ('ok' in authOrError) return authOrError as ServiceResult<SessionInfo>;
     try {
       const idToken = await tokenFromCurrentUser(authOrError, true);
-      return exchangeFirebaseIdToken(idToken, 'firebase-refresh');
+      return exchangeFirebaseIdToken(idToken, 'firebase-refresh', {}, authOrError.currentUser);
     } catch (error) {
       return firebaseError(error, 'FIREBASE_REFRESH_FAILED') as ServiceResult<SessionInfo>;
     }

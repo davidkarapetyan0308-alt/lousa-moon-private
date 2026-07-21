@@ -61,7 +61,7 @@ module.exports = ({ config }) => {
   return {
     ...config,
     name: 'LOUSA MOON',
-    version: '1.18.2',
+    version: '1.18.3',
     extra: {
       ...(config.extra || {}),
       firebaseProjectId: firebase.projectId,
@@ -80,7 +80,7 @@ module.exports = ({ config }) => {
     android: {
       ...config.android,
       package: androidPackage,
-      versionCode: 113,
+      versionCode: 114,
       googleServicesFile,
       config: {
         ...(config.android?.config || {}),
