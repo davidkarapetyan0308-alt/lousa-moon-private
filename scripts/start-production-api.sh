@@ -11,8 +11,14 @@ else
   echo "[LOUSA] Applying database migrations..."
   if [ -n "${MIGRATION_DATABASE_URL:-}" ]; then
     if ! DATABASE_URL="$MIGRATION_DATABASE_URL" npm run prisma:migrate:deploy; then
-      echo "[LOUSA] Prisma migrations failed with MIGRATION_DATABASE_URL." >&2
-      [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
+      echo "[LOUSA] Prisma migrations failed with MIGRATION_DATABASE_URL; retrying DATABASE_URL." >&2
+      if [ -z "${DATABASE_URL:-}" ] || [ "$DATABASE_URL" = "$MIGRATION_DATABASE_URL" ]; then
+        echo "[LOUSA] No distinct DATABASE_URL fallback is available." >&2
+        [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
+      elif ! DATABASE_URL="$DATABASE_URL" npm run prisma:migrate:deploy; then
+        echo "[LOUSA] Prisma migrations failed with DATABASE_URL fallback." >&2
+        [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
+      fi
     fi
   else
     if ! npm run prisma:migrate:deploy; then
