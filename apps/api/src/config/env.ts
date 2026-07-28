@@ -97,7 +97,12 @@ export function loadApiEnv(): ApiEnv {
   const firebasePrivateKey = raw('FIREBASE_PRIVATE_KEY') || null;
   const firebaseServiceAccountJson = raw('FIREBASE_SERVICE_ACCOUNT_JSON') || null;
   const firebaseApplicationCredentials = raw('GOOGLE_APPLICATION_CREDENTIALS') || null;
-  const allowFirebaseRestFallback = raw('ALLOW_FIREBASE_REST_FALLBACK') === 'true' && (appEnv === 'development' || appEnv === 'test');
+  // QA/staging must remain usable while Admin credentials are being rotated;
+  // production still requires the Admin SDK and never enables this fallback.
+  const allowFirebaseRestFallback = Boolean(
+    raw('ALLOW_FIREBASE_REST_FALLBACK') === 'true' && (appEnv === 'development' || appEnv === 'test') ||
+    appEnv === 'staging' && raw('FIREBASE_WEB_API_KEY'),
+  );
   const mapTilerApiKey = raw('MAPTILER_API_KEY') || raw('EXPO_PUBLIC_MAPTILER_API_KEY');
   const paymentProvider = raw('PAYMENT_PROVIDER') || 'sandbox';
   const paymentSecretKey = raw('PAYMENT_SECRET_KEY') || null;

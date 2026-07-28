@@ -124,8 +124,16 @@ function getFirebaseAuth(env: ApiEnv) {
 
 export async function checkFirebaseVerifierReady(env: ApiEnv) {
   if (hasFirebaseAdminCredentials(env)) {
-    getFirebaseAuth(env);
-    return { mode: 'admin' as const, projectId: env.firebaseProjectId };
+    try {
+      getFirebaseAuth(env);
+      return { mode: 'admin' as const, projectId: env.firebaseProjectId };
+    } catch (error) {
+      if (env.allowFirebaseRestFallback && env.firebaseWebApiKey && env.firebaseProjectId) {
+        console.warn('[firebase-auth] Admin credentials unavailable; using REST fallback for staging readiness.', error);
+        return { mode: 'rest' as const, projectId: env.firebaseProjectId };
+      }
+      throw error;
+    }
   }
   if (env.allowFirebaseRestFallback && env.firebaseWebApiKey && env.firebaseProjectId) {
     return { mode: 'rest' as const, projectId: env.firebaseProjectId };
