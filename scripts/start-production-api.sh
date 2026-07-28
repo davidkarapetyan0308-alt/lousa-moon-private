@@ -5,6 +5,19 @@ APP_ENV_VALUE="${APP_ENV:-production}"
 RUN_MIGRATIONS_VALUE="${RUN_MIGRATIONS_ON_START:-true}"
 SKIP_MIGRATIONS_VALUE="${SKIP_MIGRATIONS_ON_START:-false}"
 
+# Supabase's current IPv4 session pooler uses the aws-0 host prefix. Keep old
+# Render secrets working after a project restore without touching passwords.
+normalize_supabase_pooler_url() {
+  printf '%s' "${1:-}" | sed 's/@aws-eu-central-1\.pooler\.supabase\.com:/@aws-0-eu-central-1.pooler.supabase.com:/g'
+}
+
+if [ -n "${DATABASE_URL:-}" ]; then
+  export DATABASE_URL="$(normalize_supabase_pooler_url "$DATABASE_URL")"
+fi
+if [ -n "${MIGRATION_DATABASE_URL:-}" ]; then
+  export MIGRATION_DATABASE_URL="$(normalize_supabase_pooler_url "$MIGRATION_DATABASE_URL")"
+fi
+
 if [ "$SKIP_MIGRATIONS_VALUE" = "true" ] || [ "$RUN_MIGRATIONS_VALUE" != "true" ]; then
   echo "[LOUSA] Database migrations disabled for startup."
 else
