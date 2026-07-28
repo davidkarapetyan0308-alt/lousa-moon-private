@@ -108,9 +108,12 @@ function getFirebaseAuth(env: ApiEnv) {
     throw new FirebaseAdminNotConfiguredError('Firebase Admin credentials are missing.');
   }
   const existing = getApps()[0];
-  const credential = env.firebaseApplicationCredentials
-    ? applicationDefault()
-    : cert(serviceAccountFromEnv(env) as any);
+  // Prefer the explicit Render secret over GOOGLE_APPLICATION_CREDENTIALS.
+  // A stale file path in the latter must not shadow a valid service account
+  // JSON configured for this service.
+  const credential = env.firebaseServiceAccountJson || (env.firebaseProjectId && env.firebaseClientEmail && env.firebasePrivateKey)
+    ? cert(serviceAccountFromEnv(env) as any)
+    : applicationDefault();
   const app = existing || initializeApp({ credential, projectId: env.firebaseProjectId || undefined });
   cachedAuth = getAuth(app);
   return cachedAuth;
