@@ -21,6 +21,14 @@ import { advanceSubscriptionSchedule, calculateSubscriptionSchedule } from './su
 import { buildAddressFieldOrigins, mapProviderOrigins } from './addresses/fieldOrigins';
 import { courierTaskDto as buildCourierTaskDto, sanitizeCourierInstructions } from './courier/dto';
 import { evaluatePackingRecord, evaluatePackedQuantity, evaluateProductBatchForRelease, evaluateReleasedProductBatch, QualityIssue } from './quality/policy';
+import {
+  FixedWindowRateLimiter,
+  OwnerBootstrapError,
+  bootstrapSecretMatches,
+  createInitialOwner,
+  isOwnerBootstrapEnabled,
+  parseOwnerBootstrapPayload,
+} from './admin/bootstrapOwner';
 
 const env = loadApiEnv();
 const paymentProvider = createServerPaymentProvider({ provider: env.paymentProvider, appEnv: env.appEnv, webhookSecret: env.paymentWebhookSecret });
@@ -31,6 +39,7 @@ const jsonLimitBytes = Number(process.env.JSON_BODY_LIMIT_BYTES || 262_144);
 const accessTtlMs = 15 * 60_000;
 const refreshTtlMs = 30 * 24 * 60 * 60_000;
 const quoteTtlMs = 15 * 60_000;
+const ownerBootstrapFallbackLimiter = new FixedWindowRateLimiter(3, 15 * 60_000);
 
 type JsonObject = Record<string, any>;
 
@@ -299,6 +308,23 @@ async function rateLimit(key: string, max = 20, windowSeconds = 60) {
   }
   const count = await redis.incrWithExpire(`rl:${key}`, windowSeconds);
   if (count > max) throw new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please try again later.');
+}
+
+function requestIp(req: IncomingMessage) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const value = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return String(value || req.socket.remoteAddress || 'unknown').split(',')[0].trim() || 'unknown';
+}
+
+async function rateLimitOwnerBootstrap(req: IncomingMessage) {
+  const ip = requestIp(req);
+  if (env.redisUrl) {
+    await rateLimit(`admin-owner-bootstrap:${ip}`, 3, 15 * 60);
+    return;
+  }
+  if (!ownerBootstrapFallbackLimiter.consume(ip)) {
+    throw new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please try again later.');
+  }
 }
 
 async function requireUser(req: IncomingMessage) {
@@ -1297,6 +1323,46 @@ async function ensurePackingTask(order: any) {
 }
 
 async function handleAdminRoutes(pathname: string, parsed: URL, method: string, req: AuthedRequest, res: ServerResponse) {
+  if (method === 'POST' && pathname === '/v1/admin/bootstrap-owner') {
+    const configuredSecret = process.env.ADMIN_BOOTSTRAP_SECRET?.trim() || '';
+    if (!isOwnerBootstrapEnabled() || !configuredSecret) {
+      throw new ApiError(404, 'NOT_FOUND', 'Not found.');
+    }
+
+    const contentType = String(req.headers['content-type'] || '').toLowerCase();
+    if (!contentType.startsWith('application/json')) {
+      throw new ApiError(415, 'BOOTSTRAP_CONTENT_TYPE_REQUIRED', 'Content-Type must be application/json.');
+    }
+
+    await rateLimitOwnerBootstrap(req);
+    const suppliedHeader = req.headers['x-admin-bootstrap-secret'];
+    const suppliedSecret = Array.isArray(suppliedHeader) ? '' : suppliedHeader;
+    if (!bootstrapSecretMatches(suppliedSecret, configuredSecret)) {
+      throw new ApiError(401, 'BOOTSTRAP_SECRET_INVALID', 'Unauthorized.');
+    }
+
+    let payload;
+    try {
+      payload = parseOwnerBootstrapPayload(await readJson(req));
+    } catch (error) {
+      if (error instanceof OwnerBootstrapError) {
+        throw new ApiError(400, error.code, error.message);
+      }
+      throw error;
+    }
+
+    try {
+      const owner = await createInitialOwner(prisma, payload, hashSecret);
+      return json(req, res, 201, { ok: true, admin: owner });
+    } catch (error) {
+      if (error instanceof OwnerBootstrapError) {
+        const status = error.code === 'OWNER_ALREADY_EXISTS' || error.code === 'ADMIN_EMAIL_ALREADY_EXISTS' ? 409 : 400;
+        throw new ApiError(status, error.code, error.message);
+      }
+      throw error;
+    }
+  }
+
   if (method === 'POST' && pathname === '/v1/admin/auth/login') {
     await rateLimit(`admin-login:${req.socket.remoteAddress}`, 10, 300);
     const body = await readJson(req);
