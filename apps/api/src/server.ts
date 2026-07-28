@@ -29,6 +29,13 @@ import {
   isOwnerBootstrapEnabled,
   parseOwnerBootstrapPayload,
 } from './admin/bootstrapOwner';
+import {
+  OwnerRecoveryError,
+  isOwnerRecoveryEnabled,
+  parseOwnerRecoveryPayload,
+  recoverOwnerPassword,
+  recoverySecretMatches,
+} from './admin/recoverOwner';
 
 const env = loadApiEnv();
 const paymentProvider = createServerPaymentProvider({ provider: env.paymentProvider, appEnv: env.appEnv, webhookSecret: env.paymentWebhookSecret });
@@ -40,6 +47,7 @@ const accessTtlMs = 15 * 60_000;
 const refreshTtlMs = 30 * 24 * 60 * 60_000;
 const quoteTtlMs = 15 * 60_000;
 const ownerBootstrapFallbackLimiter = new FixedWindowRateLimiter(3, 15 * 60_000);
+const ownerRecoveryFallbackLimiter = new FixedWindowRateLimiter(3, 15 * 60_000);
 
 type JsonObject = Record<string, any>;
 
@@ -323,6 +331,17 @@ async function rateLimitOwnerBootstrap(req: IncomingMessage) {
     return;
   }
   if (!ownerBootstrapFallbackLimiter.consume(ip)) {
+    throw new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please try again later.');
+  }
+}
+
+async function rateLimitOwnerRecovery(req: IncomingMessage) {
+  const ip = requestIp(req);
+  if (env.redisUrl) {
+    await rateLimit(`admin-owner-recovery:${ip}`, 3, 15 * 60);
+    return;
+  }
+  if (!ownerRecoveryFallbackLimiter.consume(ip)) {
     throw new ApiError(429, 'RATE_LIMITED', 'Too many requests. Please try again later.');
   }
 }
@@ -1357,6 +1376,40 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     } catch (error) {
       if (error instanceof OwnerBootstrapError) {
         const status = error.code === 'OWNER_ALREADY_EXISTS' || error.code === 'ADMIN_EMAIL_ALREADY_EXISTS' ? 409 : 400;
+        throw new ApiError(status, error.code, error.message);
+      }
+      throw error;
+    }
+  }
+
+  if (method === 'POST' && pathname === '/v1/admin/recover-owner-password') {
+    const configuredSecret = process.env.ADMIN_OWNER_RECOVERY_SECRET?.trim() || '';
+    if (!isOwnerRecoveryEnabled() || !configuredSecret) {
+      throw new ApiError(404, 'NOT_FOUND', 'Not found.');
+    }
+    const contentType = String(req.headers['content-type'] || '').toLowerCase();
+    if (!contentType.startsWith('application/json')) {
+      throw new ApiError(415, 'OWNER_RECOVERY_CONTENT_TYPE_REQUIRED', 'Content-Type must be application/json.');
+    }
+    await rateLimitOwnerRecovery(req);
+    const suppliedHeader = req.headers['x-admin-owner-recovery-secret'];
+    const suppliedSecret = Array.isArray(suppliedHeader) ? '' : suppliedHeader;
+    if (!recoverySecretMatches(suppliedSecret, configuredSecret)) {
+      throw new ApiError(401, 'OWNER_RECOVERY_SECRET_INVALID', 'Unauthorized.');
+    }
+    let payload;
+    try {
+      payload = parseOwnerRecoveryPayload(await readJson(req));
+    } catch (error) {
+      if (error instanceof OwnerRecoveryError) throw new ApiError(400, error.code, error.message);
+      throw error;
+    }
+    try {
+      const owner = await recoverOwnerPassword(prisma, payload, hashSecret);
+      return json(req, res, 200, { ok: true, admin: owner });
+    } catch (error) {
+      if (error instanceof OwnerRecoveryError) {
+        const status = error.code === 'OWNER_RECOVERY_ALREADY_USED' || error.code === 'OWNER_RECOVERY_NOT_ALLOWED' ? 409 : 400;
         throw new ApiError(status, error.code, error.message);
       }
       throw error;
