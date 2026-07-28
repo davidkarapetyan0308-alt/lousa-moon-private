@@ -82,7 +82,10 @@ function normalizePrivateKey(value: string) {
 function serviceAccountFromEnv(env: ApiEnv) {
   if (env.firebaseServiceAccountJson) {
     try {
-      const parsed = JSON.parse(env.firebaseServiceAccountJson);
+      // Render secrets are sometimes pasted as a JSON-encoded string, which
+      // produces one extra quoting layer. Accept both raw JSON and that form.
+      const decoded = JSON.parse(env.firebaseServiceAccountJson);
+      const parsed = typeof decoded === 'string' ? JSON.parse(decoded) : decoded;
       return {
         projectId: parsed.project_id || parsed.projectId || env.firebaseProjectId || undefined,
         clientEmail: parsed.client_email || parsed.clientEmail,
