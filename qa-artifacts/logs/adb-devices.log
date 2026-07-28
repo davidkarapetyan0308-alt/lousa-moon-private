@@ -1,0 +1,3 @@
+$ adb devices -l
+adb: command not found
+EXIT=127

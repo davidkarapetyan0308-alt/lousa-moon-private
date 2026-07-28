@@ -79,7 +79,7 @@ export default function LegalScreen() {
         <SurfaceCard padding={18} tone="accent">
           <View style={styles.introRow}>
             <MaterialSymbol name={document === 'privacy' ? 'shield' : 'description'} size={23} color={LousaPalette.berry} />
-            <Text style={[styles.intro, { color: colors.onSurfaceVariant }]}>LOUSA MOON · Version 1.12.0 · Build 86</Text>
+            <Text style={[styles.intro, { color: colors.onSurfaceVariant }]}>LOUSA MOON · Version 1.18.22 · Build 133</Text>
           </View>
         </SurfaceCard>
         {content.sections.map(([title, body]) => (

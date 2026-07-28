@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "550574274608",
+    "project_id": "lousa-moon",
+    "storage_bucket": "lousa-moon.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:550574274608:android:1c8840e746c0edc0b615f5",
+        "android_client_info": {
+          "package_name": "com.lousa.moon"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "550574274608-nv7fude200k04m9ekcmd80j3hjl8jm3t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lousa.moon",
+            "certificate_hash": "7e6a3034ae34f9b6c1d3234b2a0013453a00d15a"
+          }
+        },
+        {
+          "client_id": "550574274608-q2ebi8j7cugrmelab45q521iull9ksug.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lousa.moon",
+            "certificate_hash": "c8fe8487b2d6ec60de8eb01b320ceae4739a80ff"
+          }
+        },
+        {
+          "client_id": "550574274608-6qtvg9pbn4go01dv9spt8nnv4lfu65lu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD3ujoie7meBqxb6SmUebp_LIIudMvPnGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "550574274608-6qtvg9pbn4go01dv9spt8nnv4lfu65lu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

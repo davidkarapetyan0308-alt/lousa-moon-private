@@ -1,0 +1,6 @@
+TS/TSX syntax PASS — 185 files (TypeScript parser)
+Thread geometry runtime PASS
+Transparent native splash assets PASS — 1x1 fully transparent PNG in app assets and all Android drawable densities
+verify:version-consistency PASS — 1.18.15 (126)
+verify:paper-moon-entry PASS
+verify:single-stage-auth-intro PASS

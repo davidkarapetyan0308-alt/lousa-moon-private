@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { AUTH_TOKEN_KEYS, secureStorage } from './security/secureStorage';
+import { clearAllAuthSessionState } from '../features/auth/session/sessionState';
 import { clearEncryptedUserState, encryptedStateStorage } from '../security/encryptedStateStorage';
 import type { BoxPreferences, OnboardingProfile } from '../domain/models';
 import { useBoxStore, useCycleStore, useEngagementStore, useNotificationStore, useUserStore, useWellnessStore } from '../store';
@@ -60,6 +61,7 @@ export async function clearAllLocalData(): Promise<void> {
 
   await removeLocalAvatar(avatarUri);
   await secureStorage.clear([...AUTH_TOKEN_KEYS]);
+  await clearAllAuthSessionState();
   await clearEncryptedUserState();
   await Promise.all([
     'lousa-notifications',
@@ -84,7 +86,12 @@ export async function clearAllLocalData(): Promise<void> {
     isOnboarded: false,
     language: 'ru',
     isDemoMode: false,
+    isGuestMode: false,
+    guestAuthFlowActive: false,
+    guestStartedAt: null,
     communicationStyle: 'neutral',
+    sessionState: 'unauthenticated',
+    sessionError: null,
   });
 
   useCycleStore.setState({

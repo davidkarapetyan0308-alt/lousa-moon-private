@@ -74,12 +74,12 @@ export const localAuthService: AuthService = {
   },
   async signOut() {
     await secureStorage.clear([...AUTH_TOKEN_KEYS]);
-    useUserStore.setState({ isOnboarded: false, isDemoMode: false });
+    useUserStore.setState({ isOnboarded: false, isDemoMode: false, isGuestMode: false, guestAuthFlowActive: false, guestStartedAt: null, sessionState: 'unauthenticated', sessionError: null });
     return ok(undefined);
   },
   async signOutAll() {
     await secureStorage.clear([...AUTH_TOKEN_KEYS]);
-    useUserStore.setState({ isOnboarded: false, isDemoMode: false });
+    useUserStore.setState({ isOnboarded: false, isDemoMode: false, isGuestMode: false, guestAuthFlowActive: false, guestStartedAt: null, sessionState: 'unauthenticated', sessionError: null });
     return ok(undefined);
   },
   async requestEmailCode() {

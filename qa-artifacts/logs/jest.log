@@ -1,0 +1,7 @@
+$ npm test -- --runInBand
+
+> lousa-moon@1.18.22 test
+> jest --runInBand
+
+sh: 1: jest: not found
+EXIT=127

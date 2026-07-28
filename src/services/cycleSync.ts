@@ -2,6 +2,7 @@ import type { CycleDayObservation, PeriodRecord } from '../domain/models';
 import { encryptedJsonStore } from '../security/encryptedStateStorage';
 import { apiCycleSyncTransport } from './api';
 import { useCycleStore } from '../store';
+import { getStoredAuthSessionState } from '../features/auth/session/sessionState';
 
 const QUEUE_KEY = 'lousa-cycle-sync-v2';
 
@@ -45,6 +46,7 @@ function normalizeOperation(operation: Partial<CycleSyncOperation> & Pick<CycleS
 
 export async function enqueueCycleSync(operations: Array<Partial<CycleSyncOperation> & Pick<CycleSyncOperation, 'kind' | 'payload'>>) {
   if (!operations.length) return;
+  if ((await getStoredAuthSessionState()) === 'guest') return;
   const existing = await readQueue();
   const compacted = new Map<string, CycleSyncOperation>();
   for (const operation of [...existing, ...operations.map(normalizeOperation)]) compacted.set(entityKey(operation), operation);
@@ -79,6 +81,7 @@ function applyServerRevision(operation: CycleSyncOperation, data: unknown) {
 }
 
 export async function flushCycleSyncQueue() {
+  if ((await getStoredAuthSessionState()) === 'guest') return { synced: 0, failed: 0, conflicts: 0 };
   const queue = await readQueue();
   if (!queue.length) return { synced: 0, failed: 0, conflicts: 0 };
   const failed: CycleSyncOperation[] = [];

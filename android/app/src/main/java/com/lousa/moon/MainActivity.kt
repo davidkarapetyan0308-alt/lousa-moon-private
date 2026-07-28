@@ -8,18 +8,13 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import expo.modules.ReactActivityDelegateWrapper
+import expo.modules.splashscreen.SplashScreenManager
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Set the theme to AppTheme BEFORE onCreate to support
-    // coloring the background, status bar, and navigation bar.
-    // This is required for expo-splash-screen.
-    setTheme(R.style.AppTheme)
-    // LOUSA V10.4.1 BOOT UNFREEZE FIX:
-    // Do not register Expo native splash holder here.
-    // The previous APK could stay forever on Android native splash if JS boot crashed
-    // before expo-splash-screen.hideAsync() executed.
-    // App now starts directly into React/BootRecovery instead of a blocking native splash.
+    // Register Expo splash before React is created. JavaScript holds it with
+    // preventAutoHideAsync until the first real destination is fully laid out.
+    SplashScreenManager.registerOnActivity(this)
     super.onCreate(null)
   }
 

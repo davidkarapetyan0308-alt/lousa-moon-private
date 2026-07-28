@@ -15,9 +15,15 @@ import { loadApiEnv } from './config/env';
 import { prisma } from './db/prisma';
 import { RedisLite } from './db/redis';
 import { hashSecret, stableHash, verifySecret } from './security/hash';
-import { FirebaseAdminNotConfiguredError, verifyFirebaseIdToken } from './auth/firebaseAdmin';
+import { checkFirebaseVerifierReady, FirebaseAdminNotConfiguredError, verifyFirebaseIdToken } from './auth/firebaseAdmin';
+import { createServerPaymentProvider, PaymentProviderError } from './payments/provider';
+import { advanceSubscriptionSchedule, calculateSubscriptionSchedule } from './subscriptions/schedule';
+import { buildAddressFieldOrigins, mapProviderOrigins } from './addresses/fieldOrigins';
+import { courierTaskDto as buildCourierTaskDto, sanitizeCourierInstructions } from './courier/dto';
+import { evaluatePackingRecord, evaluatePackedQuantity, evaluateProductBatchForRelease, evaluateReleasedProductBatch, QualityIssue } from './quality/policy';
 
 const env = loadApiEnv();
+const paymentProvider = createServerPaymentProvider({ provider: env.paymentProvider, appEnv: env.appEnv, webhookSecret: env.paymentWebhookSecret });
 const redis = new RedisLite(env.redisUrl);
 const googleClient = new OAuth2Client(env.googleWebClientId);
 const allowedGoogleAudiences = [env.googleWebClientId, env.googleAndroidClientId].filter(Boolean);
@@ -51,6 +57,11 @@ function language(value: unknown): 'ru' | 'en' | 'hy' { return value === 'en' ||
 function str(value: unknown, max = 500) { return String(value ?? '').trim().slice(0, max); }
 function optionalStr(value: unknown, max = 500) { const v = str(value, max); return v || null; }
 function int(value: unknown, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? Math.trunc(n) : fallback; }
+function upperEnum<T extends string>(value: unknown, allowed: readonly T[], code: string): T {
+  const normalized = String(value || '').trim().toUpperCase() as T;
+  if (!allowed.includes(normalized)) throw new ApiError(400, code, 'Недопустимое значение статуса.');
+  return normalized;
+}
 function bool(value: unknown) { return value === true || value === 'true'; }
 function syncMeta(body: any) {
   const raw = body?._sync && typeof body._sync === 'object' ? body._sync : null;
@@ -67,6 +78,20 @@ function assertExpectedRevision(existing: any, meta: ReturnType<typeof syncMeta>
   const actual = Number(existing.revision || 1);
   if (!Number.isFinite(meta.expectedServerRevision) || meta.expectedServerRevision !== actual) {
     throw new ApiError(409, 'REVISION_CONFLICT', 'Запись была изменена на другом устройстве.', { expected: meta.expectedServerRevision, actual });
+  }
+}
+
+async function withServerTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -197,7 +222,7 @@ function setCommonHeaders(req: IncomingMessage, res: ServerResponse) {
   if (allowedOrigin) res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   if (origin && allowedOrigin !== '*') res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-Id, X-Auth-Attempt-ID, X-App-Version, X-App-Build, X-App-Package');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -212,12 +237,18 @@ function json(req: IncomingMessage, res: ServerResponse, status: number, data: u
 
 function errorResponse(req: IncomingMessage, res: ServerResponse, error: unknown) {
   const requestId = (req as AuthedRequest).requestId || randomUUID();
+  if (error instanceof PaymentProviderError) {
+    json(req, res, error.recoverable ? 502 : 503, { error: { code: error.code, message: error.message, requestId } });
+    return;
+  }
   if (error instanceof ApiError) {
     json(req, res, error.status, { error: { code: error.code, message: error.message, details: error.details, requestId } });
     return;
   }
   console.error('[api] unhandled request error', { requestId, error });
-  const message = env.appEnv === 'production' ? 'Server error.' : error instanceof Error ? error.message : 'Unknown server error.';
+  const message = env.appEnv === 'development' || env.appEnv === 'test'
+    ? (error instanceof Error ? error.message : 'Unknown server error.')
+    : 'Server error.';
   json(req, res, 500, { error: { code: 'SERVER_ERROR', message, requestId } });
 }
 
@@ -239,6 +270,24 @@ async function readJson(req: IncomingMessage): Promise<any> {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
       catch { reject(new ApiError(400, 'INVALID_JSON', 'Invalid JSON body.')); }
     });
+    req.on('error', reject);
+  });
+}
+
+async function readRawBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  return new Promise((resolve, reject) => {
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > jsonLimitBytes) {
+        reject(new ApiError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large.'));
+        req.destroy();
+        return;
+      }
+      chunks.push(Buffer.from(chunk));
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
@@ -325,49 +374,73 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
   const avatarUri = optionalStr(decoded.picture, 500);
 
   try {
-    const identity = await (prisma as any).authIdentity.findUnique({
-      where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
-      include: { user: true },
-    });
-    let user = identity?.user || null;
-    let isNewUser = false;
-
-    if (!user && email) user = await (prisma as any).user.findUnique({ where: { email } });
-    if (!user && phone) user = await (prisma as any).user.findFirst({ where: { phone, deletedAt: null } });
-
-    if (!user) {
-      user = await (prisma as any).user.create({
-        data: {
-          email: email || firebaseSyntheticEmail(firebaseUid),
-          emailVerifiedAt: decoded.email_verified ? now() : null,
-          phone,
-          name: displayName,
-          language: language(profile.language),
-          status: 'active',
-        },
+    const result = await (prisma as any).$transaction(async (tx: any) => {
+      const identity = await tx.authIdentity.findUnique({
+        where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
+        include: { user: true },
       });
-      isNewUser = true;
-    } else {
-      const updates: JsonObject = { status: user.status === 'pending' ? 'active' : user.status };
-      if (decoded.email_verified && !user.emailVerifiedAt) updates.emailVerifiedAt = now();
-      if (phone && !user.phone) updates.phone = phone;
-      if (displayName && (!user.name || user.name === 'LOUSA')) updates.name = displayName;
-      if (Object.keys(updates).length) user = await (prisma as any).user.update({ where: { id: user.id }, data: updates });
-    }
+      let user = identity?.user || null;
+      let isNewUser = false;
 
-    await (prisma as any).authIdentity.upsert({
-      where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
-      update: { providerEmail: email || null },
-      create: { userId: user.id, provider: 'firebase', providerSubject: firebaseUid, providerEmail: email || null },
+      // Do not silently merge a Firebase identity into a legacy LOUSA account
+      // based only on matching email/phone. The user must authenticate with the
+      // original method first and explicitly link providers.
+      if (!user && email) {
+        const emailOwner = await tx.user.findUnique({ where: { email } });
+        if (emailOwner) {
+          throw new ApiError(409, 'AUTH_ACCOUNT_LINK_REQUIRED', 'An account with this email already exists. Sign in with the original method to link Google.');
+        }
+      }
+      if (!user && phone) {
+        const phoneOwner = await tx.user.findFirst({ where: { phone, deletedAt: null } });
+        if (phoneOwner) {
+          throw new ApiError(409, 'AUTH_ACCOUNT_LINK_REQUIRED', 'An account with this phone already exists. Sign in with the original method to link Google.');
+        }
+      }
+
+      if (!user) {
+        const userEmail = email || firebaseSyntheticEmail(firebaseUid);
+        // Upsert makes repeated or concurrent exchanges idempotent even if the
+        // first HTTP response was lost and the client retries the same Firebase UID.
+        user = await tx.user.upsert({
+          where: { email: userEmail },
+          update: {},
+          create: {
+            email: userEmail,
+            emailVerifiedAt: decoded.email_verified ? now() : null,
+            phone,
+            name: displayName,
+            avatarUri,
+            language: language(profile.language),
+            status: 'active',
+          },
+        });
+        isNewUser = true;
+      } else {
+        const updates: JsonObject = { status: user.status === 'pending' ? 'active' : user.status };
+        if (decoded.email_verified && !user.emailVerifiedAt) updates.emailVerifiedAt = now();
+        if (phone && !user.phone) updates.phone = phone;
+        if (displayName && (!user.name || user.name === 'LOUSA')) updates.name = displayName;
+        if (avatarUri && !user.avatarUri) updates.avatarUri = avatarUri;
+        if (Object.keys(updates).length) user = await tx.user.update({ where: { id: user.id }, data: updates });
+      }
+
+      await tx.authIdentity.upsert({
+        where: { provider_providerSubject: { provider: 'firebase', providerSubject: firebaseUid } },
+        update: { providerEmail: email || null, userId: user.id },
+        create: { userId: user.id, provider: 'firebase', providerSubject: firebaseUid, providerEmail: email || null },
+      });
+      await tx.authIdentity.upsert({
+        where: { provider_providerSubject: { provider: `firebase:${provider}`, providerSubject: firebaseUid } },
+        update: { providerEmail: email || null, userId: user.id },
+        create: { userId: user.id, provider: `firebase:${provider}`, providerSubject: firebaseUid, providerEmail: email || null },
+      });
+      return { user, isNewUser };
     });
-    await (prisma as any).authIdentity.upsert({
-      where: { provider_providerSubject: { provider: `firebase:${provider}`, providerSubject: firebaseUid } },
-      update: { providerEmail: email || null },
-      create: { userId: user.id, provider: `firebase:${provider}`, providerSubject: firebaseUid, providerEmail: email || null },
-    }).catch(() => null);
 
-    return sessionPayload(user, req, { isNewUser, firebaseUid, authProvider: 'firebase' });
+    return sessionPayload(result.user, req, { isNewUser: result.isNewUser, firebaseUid, authProvider: 'firebase' });
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     console.error('[firebase-auth] session database persistence failed', error);
     throw new ApiError(503, 'AUTH_DATABASE_UNAVAILABLE', 'Auth database is temporarily unavailable.');
   }
@@ -514,7 +587,7 @@ function orderFromDb(order: any) {
     items,
     statusHistory: [{ status: String(order.status || 'awaiting_payment').toLowerCase(), at: order.createdAt.toISOString(), source: 'system' }],
     deliveryAddressSnapshot: order.deliverySnapshot || snapshot.deliveryAddress || null,
-    demo: env.paymentProvider === 'sandbox',
+    demo: paymentProvider.demo,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   };
@@ -719,6 +792,7 @@ function safeDeliveryAddressSnapshot(address: any) {
     planCode: address.planCode || null,
     zoneVerifiedAt: address.zoneVerifiedAt?.toISOString?.() || address.zoneVerifiedAt || null,
     estimatedMinutes: address.estimatedMinutes,
+    fieldOrigins: address.fieldOrigins || {},
   };
 }
 
@@ -750,17 +824,29 @@ function mapTilerFeatureToAddress(feature: any): JsonObject {
   const context = Array.isArray(feature?.context) ? feature.context : [];
   const contextText = (kind: string) => context.find((item: any) => String(item?.id || '').startsWith(kind))?.text || '';
   const placeName = feature?.place_name || feature?.place_name_en || feature?.text || feature?.properties?.name || '';
+  const country = contextText('country');
+  const region = contextText('region') || contextText('province');
+  const city = contextText('place') || contextText('locality') || feature?.text || '';
+  const district = contextText('neighbourhood') || contextText('district') || '';
+  const street = feature?.properties?.address || feature?.text || '';
+  const house = feature?.address || '';
+  const postalCode = contextText('postcode') || '';
+  const confirmedFields = Object.entries({ country, region, city, district, street, house, postalCode })
+    .filter(([, value]) => String(value || '').trim())
+    .map(([key]) => key);
+  const inferredFields = [!country && 'country', !region && 'region', !city && 'city'].filter(Boolean) as string[];
   return {
     provider: 'maptiler',
     providerPlaceId: feature?.id || null,
     formattedAddress: placeName,
-    country: contextText('country') || 'Armenia',
-    region: contextText('region') || contextText('province') || 'Shirak',
-    city: contextText('place') || contextText('locality') || feature?.text || 'Gyumri',
-    district: contextText('neighbourhood') || contextText('district') || '',
-    street: feature?.properties?.address || feature?.text || '',
-    house: feature?.address || '',
-    postalCode: contextText('postcode') || '',
+    country: country || 'Armenia',
+    region: region || 'Shirak',
+    city: city || 'Gyumri',
+    district,
+    street,
+    house,
+    postalCode,
+    fieldOrigins: mapProviderOrigins({ confirmed: confirmedFields, inferred: inferredFields }),
     latitude: Number(latitude) || 0,
     longitude: Number(longitude) || 0,
   };
@@ -1018,8 +1104,7 @@ function packerOrderDto(order: any) {
 }
 
 function courierTaskDto(task: any) {
-  const payload = task.safePayload || {};
-  return { id: task.id, orderCode: task.order ? orderCode(task.order) : payload.orderCode, recipientName: payload.recipientName || task.order?.deliveryAddress?.recipientName || '', phone: payload.phone || task.order?.deliveryAddress?.phone || '', formattedAddress: payload.formattedAddress || task.order?.deliveryAddress?.formattedAddress || '', latitude: payload.latitude || task.order?.deliveryAddress?.latitude || null, longitude: payload.longitude || task.order?.deliveryAddress?.longitude || null, handoffType: payload.handoffType || task.order?.deliveryAddress?.handoffType || null, instructions: payload.instructions || task.order?.deliveryAddress?.instructions || null, status: task.status, eta: task.eta?.toISOString?.() || null };
+  return buildCourierTaskDto(task, orderCode);
 }
 
 
@@ -1159,20 +1244,36 @@ async function createPublicOrderEvent(orderId: string, status: string, internalN
   return (prisma as any).orderEvent.create({ data: { orderId, type: status, publicTitleRu: copy.title, publicBodyRu: copy.body, publicTitle: copy.title, publicBody: copy.body, internalTitle: `Internal ${status}`, internalBody: internalNote || null, internalNote: internalNote || null, visibleToCustomer: true } }).catch(() => null);
 }
 
+function assertQualityIssues(issues: QualityIssue[]) {
+  const issue = issues[0];
+  if (issue) throw new ApiError(409, issue.code, issue.message, { issues });
+}
+
 async function assertOrderPackingQuality(orderId: string) {
-  const order = await (prisma as any).order.findUnique({ where: { id: orderId }, include: { items: true, boxPackingRecord: { include: { batches: { include: { productBatch: true } } } } } });
+  const order = await (prisma as any).order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: true,
+      boxPackingRecord: {
+        include: {
+          batches: {
+            include: {
+              productBatch: { include: { product: true, supplier: true } },
+            },
+          },
+        },
+      },
+    },
+  });
   if (!order) throw new ApiError(404, 'ORDER_NOT_FOUND', 'Заказ не найден.');
   const record = order.boxPackingRecord;
-  if (!record || record.qaStatus !== 'RELEASED' || !record.qaReleasedAt || !record.sealedAt || !record.sealId) {
-    throw new ApiError(409, 'BOX_QA_NOT_RELEASED', 'Бокс нельзя передать курьеру до проверки качества и пломбирования.');
-  }
+  assertQualityIssues(evaluatePackingRecord(record));
+
   const packedByProduct = new Map<string, number>();
   for (const link of record.batches || []) {
     const batch = link.productBatch;
-    if (!batch || batch.qaStatus !== 'RELEASED' || batch.recallStatus !== 'CLEAR') {
-      throw new ApiError(409, 'PRODUCT_BATCH_NOT_RELEASED', 'В боксе есть партия без разрешения контроля качества.');
-    }
-    if (batch.expiryDate && batch.expiryDate <= now()) throw new ApiError(409, 'PRODUCT_BATCH_EXPIRED', 'В боксе есть товар с истёкшим сроком годности.');
+    assertQualityIssues(evaluateReleasedProductBatch(batch, now()));
+    assertQualityIssues(evaluatePackedQuantity(batch, Number(link.quantity || 0)));
     packedByProduct.set(batch.productId, (packedByProduct.get(batch.productId) || 0) + Number(link.quantity || 0));
   }
   for (const item of order.items || []) {
@@ -1508,7 +1609,7 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     const updated = await (prisma as any).order.update({ where: { id: order.id }, data: { status: nextStatus, paymentStatus: nextStatus === 'PAID' ? 'PAID' : order.paymentStatus } });
     if (nextStatus === 'PACKING' || nextStatus === 'PAID') await ensurePackingTask({ ...order, status: nextStatus });
     if (nextStatus === 'READY_FOR_COURIER') {
-      const payload = { orderCode: orderCode(order), recipientName: order.deliveryAddress?.recipientName, phone: order.deliveryAddress?.phone, formattedAddress: order.deliveryAddress?.formattedAddress, latitude: order.deliveryAddress?.latitude, longitude: order.deliveryAddress?.longitude, handoffType: order.deliveryAddress?.handoffType, instructions: order.deliveryAddress?.instructions };
+      const payload = { orderCode: orderCode(order), recipientName: order.deliveryAddress?.recipientName, phone: order.deliveryAddress?.phone, formattedAddress: order.deliveryAddress?.formattedAddress, latitude: order.deliveryAddress?.latitude, longitude: order.deliveryAddress?.longitude, handoffType: order.deliveryAddress?.handoffType, instructions: sanitizeCourierInstructions(order.deliveryAddress?.instructions) };
       await (prisma as any).deliveryTask.upsert({ where: { orderId: order.id }, update: { status: 'READY', safePayload: payload }, create: { orderId: order.id, status: 'READY', safePayload: payload } }).catch(() => null);
     }
     await createPublicOrderEvent(order.id, nextStatus, reason);
@@ -1584,6 +1685,25 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     return json(req, res, 201, supplier);
   }
 
+  const supplierStatusMatch = pathname.match(/^\/v1\/admin\/quality\/suppliers\/([^/]+)\/status$/);
+  if (supplierStatusMatch && method === 'PATCH') {
+    requireRole(admin, ['OWNER','ADMIN','CATALOG_MANAGER']);
+    const body = await readJson(req);
+    const agreementStatus = upperEnum(body.agreementStatus, ['PENDING','ACTIVE','SUSPENDED','TERMINATED','EXPIRED'], 'SUPPLIER_AGREEMENT_STATUS_INVALID');
+    const qualityStatus = upperEnum(body.qualityStatus, ['PENDING_REVIEW','APPROVED','SUSPENDED','REJECTED','BLOCKED'], 'SUPPLIER_QUALITY_STATUS_INVALID');
+    const supplier = await (prisma as any).supplier.update({
+      where: { id: supplierStatusMatch[1] },
+      data: {
+        agreementStatus,
+        qualityStatus,
+        lastAuditAt: qualityStatus === 'APPROVED' ? now() : undefined,
+      },
+    }).catch(() => null);
+    if (!supplier) throw new ApiError(404, 'SUPPLIER_NOT_FOUND', 'Поставщик не найден.');
+    await adminAudit(admin, 'SUPPLIER_STATUS_UPDATED', 'Supplier', supplier.id, { agreementStatus, qualityStatus });
+    return json(req, res, 200, supplier);
+  }
+
   if (method === 'POST' && pathname === '/v1/admin/quality/batches') {
     requireRole(admin, ['OWNER','ADMIN','CATALOG_MANAGER','PACKER']);
     const body = await readJson(req);
@@ -1606,9 +1726,24 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
   if (batchReleaseMatch && method === 'PATCH') {
     requireRole(admin, ['OWNER','ADMIN','CATALOG_MANAGER']);
     const body = await readJson(req);
-    const batch = await (prisma as any).productBatch.update({ where: { id: batchReleaseMatch[1] }, data: {
-      qaStatus: body.approved === false ? 'REJECTED' : 'RELEASED', qaCheckedAt: now(), qaCheckedBy: admin.id,
-      qaNotes: optionalStr(body.notes, 500), recallStatus: body.approved === false ? 'BLOCKED' : 'CLEAR',
+    const existing = await (prisma as any).productBatch.findUnique({
+      where: { id: batchReleaseMatch[1] },
+      include: { product: true, supplier: true },
+    });
+    if (!existing) throw new ApiError(404, 'PRODUCT_BATCH_NOT_FOUND', 'Партия не найдена.');
+    const approved = body.approved !== false;
+    if (approved) {
+      assertQualityIssues(evaluateProductBatchForRelease({
+        ...existing,
+        qaStatus: 'RELEASED',
+        qaCheckedAt: now(),
+        qaCheckedBy: admin.id,
+        recallStatus: 'CLEAR',
+      }, now()));
+    }
+    const batch = await (prisma as any).productBatch.update({ where: { id: existing.id }, data: {
+      qaStatus: approved ? 'RELEASED' : 'REJECTED', qaCheckedAt: now(), qaCheckedBy: admin.id,
+      qaNotes: optionalStr(body.notes, 500), recallStatus: approved ? 'CLEAR' : 'BLOCKED',
     } });
     await adminAudit(admin, 'PRODUCT_BATCH_QA_UPDATED', 'ProductBatch', batch.id, { qaStatus: batch.qaStatus });
     return json(req, res, 200, batch);
@@ -1618,32 +1753,79 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
   if (packingRecordMatch && method === 'PUT') {
     requireRole(admin, ['OWNER','ADMIN','PACKER']);
     const body = await readJson(req);
+    if (body.release === true) {
+      throw new ApiError(409, 'BOX_RELEASE_SEPARATE_REVIEW_REQUIRED', 'Сборщик не может сам выпустить бокс. Сохраните сборку и передайте её второму проверяющему.');
+    }
     const order = await (prisma as any).order.findUnique({ where: { id: packingRecordMatch[1] }, include: { items: true } });
     if (!order) throw new ApiError(404, 'ORDER_NOT_FOUND', 'Заказ не найден.');
     const batchLines = Array.isArray(body.batches) ? body.batches : [];
     if (!batchLines.length) throw new ApiError(400, 'PACKING_BATCHES_REQUIRED', 'Укажите проверенные партии для каждого товара.');
     const record = await (prisma as any).$transaction(async (tx: any) => {
+      const packedByProduct = new Map<string, number>();
+      const validatedLines: Array<{ productBatchId: string; quantity: number }> = [];
+      for (const line of batchLines) {
+        const productBatchId = str(line.productBatchId, 80);
+        const quantity = int(line.quantity, 0);
+        const batch = await tx.productBatch.findUnique({ where: { id: productBatchId }, include: { product: true, supplier: true } });
+        if (!batch) throw new ApiError(404, 'PRODUCT_BATCH_NOT_FOUND', 'Одна из выбранных партий не найдена.');
+        assertQualityIssues(evaluateReleasedProductBatch(batch, now()));
+        assertQualityIssues(evaluatePackedQuantity(batch, quantity));
+        packedByProduct.set(batch.productId, (packedByProduct.get(batch.productId) || 0) + quantity);
+        validatedLines.push({ productBatchId, quantity });
+      }
+      for (const item of order.items || []) {
+        if ((packedByProduct.get(item.productId) || 0) < Number(item.quantity || 0)) {
+          throw new ApiError(409, 'PACKING_BATCH_TRACE_INCOMPLETE', 'Не все товары заказа связаны с проверенными партиями.');
+        }
+      }
       const saved = await tx.boxPackingRecord.upsert({ where: { orderId: order.id }, update: {
-        packedBy: admin.id, checkedBy: optionalStr(body.checkedBy, 80), qaStatus: body.release === true ? 'RELEASED' : 'PENDING',
-        qaReleasedAt: body.release === true ? now() : null, sealedAt: body.sealId ? now() : null, sealId: optionalStr(body.sealId, 120),
+        packedBy: admin.id, checkedBy: null, qaStatus: 'PENDING', qaReleasedAt: null,
+        sealedAt: body.sealId ? now() : null, sealId: optionalStr(body.sealId, 120),
         measuredWeightG: body.measuredWeightG == null ? null : int(body.measuredWeightG, 0), photoReference: optionalStr(body.photoReference, 500),
         substitutionLog: body.substitutionLog || null,
       }, create: {
-        orderId: order.id, packedBy: admin.id, checkedBy: optionalStr(body.checkedBy, 80), qaStatus: body.release === true ? 'RELEASED' : 'PENDING',
-        qaReleasedAt: body.release === true ? now() : null, sealedAt: body.sealId ? now() : null, sealId: optionalStr(body.sealId, 120),
+        orderId: order.id, packedBy: admin.id, checkedBy: null, qaStatus: 'PENDING', qaReleasedAt: null,
+        sealedAt: body.sealId ? now() : null, sealId: optionalStr(body.sealId, 120),
         measuredWeightG: body.measuredWeightG == null ? null : int(body.measuredWeightG, 0), photoReference: optionalStr(body.photoReference, 500),
         substitutionLog: body.substitutionLog || null,
       } });
       await tx.boxPackingBatch.deleteMany({ where: { packingRecordId: saved.id } });
-      for (const line of batchLines) {
-        const quantity = int(line.quantity, 0);
-        if (quantity <= 0) throw new ApiError(400, 'PACKING_QUANTITY_INVALID', 'Количество партии в боксе должно быть больше нуля.');
-        await tx.boxPackingBatch.create({ data: { packingRecordId: saved.id, productBatchId: str(line.productBatchId, 80), quantity } });
+      for (const line of validatedLines) {
+        await tx.boxPackingBatch.create({ data: { packingRecordId: saved.id, productBatchId: line.productBatchId, quantity: line.quantity } });
       }
-      return tx.boxPackingRecord.findUnique({ where: { id: saved.id }, include: { batches: { include: { productBatch: true } } } });
+      return tx.boxPackingRecord.findUnique({ where: { id: saved.id }, include: { batches: { include: { productBatch: { include: { product: true, supplier: true } } } } } });
     });
-    if (body.release === true) await assertOrderPackingQuality(order.id);
-    await adminAudit(admin, 'BOX_PACKING_QUALITY_RECORDED', 'Order', order.id, { released: body.release === true });
+    await adminAudit(admin, 'BOX_PACKING_QUALITY_RECORDED', 'Order', order.id, { released: false });
+    return json(req, res, 200, record);
+  }
+
+  const packingReleaseMatch = pathname.match(/^\/v1\/admin\/packing\/([^/]+)\/quality-record\/release$/);
+  if (packingReleaseMatch && method === 'PATCH') {
+    requireRole(admin, ['OWNER','ADMIN','CATALOG_MANAGER']);
+    const orderId = packingReleaseMatch[1];
+    const record = await (prisma as any).$transaction(async (tx: any) => {
+      const existing = await tx.boxPackingRecord.findUnique({
+        where: { orderId },
+        include: { batches: { include: { productBatch: { include: { product: true, supplier: true } } } } },
+      });
+      if (!existing) throw new ApiError(404, 'BOX_QA_RECORD_REQUIRED', 'Сначала сохраните запись сборки бокса.');
+      if (String(existing.packedBy) === String(admin.id)) {
+        throw new ApiError(409, 'DUAL_CONTROL_REQUIRED', 'Сборщик не может проверять и выпускать собственный бокс.');
+      }
+      const candidate = { ...existing, checkedBy: admin.id, qaStatus: 'RELEASED', qaReleasedAt: now() };
+      assertQualityIssues(evaluatePackingRecord(candidate));
+      for (const link of existing.batches || []) {
+        assertQualityIssues(evaluateReleasedProductBatch(link.productBatch, now()));
+        assertQualityIssues(evaluatePackedQuantity(link.productBatch, Number(link.quantity || 0)));
+      }
+      return tx.boxPackingRecord.update({
+        where: { id: existing.id },
+        data: { checkedBy: admin.id, qaStatus: 'RELEASED', qaReleasedAt: now() },
+        include: { batches: { include: { productBatch: { include: { product: true, supplier: true } } } } },
+      });
+    });
+    await assertOrderPackingQuality(orderId);
+    await adminAudit(admin, 'BOX_PACKING_QA_RELEASED', 'Order', orderId, { checkedBy: admin.id });
     return json(req, res, 200, record);
   }
 
@@ -2034,48 +2216,83 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
 }
 
 async function router(req: AuthedRequest, res: ServerResponse) {
-  req.requestId = String(req.headers['x-request-id'] || randomUUID());
+  req.requestId = String(req.headers['x-auth-attempt-id'] || req.headers['x-request-id'] || randomUUID()).slice(0, 160);
   if (req.method === 'OPTIONS') return json(req, res, 204, {});
   const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = route(parsed.pathname);
   const method = req.method || 'GET';
 
   if (method === 'GET' && pathname === '/health') {
-    let databaseAuthSchemaConfigured = false;
-    let databaseAuthSchemaTables: JsonObject = {};
-    if (env.databaseUrl) {
-      try {
-        const rows = await prisma.$queryRawUnsafe(`
-          SELECT
-            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'User') AS "user",
-            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthIdentity') AS "authIdentity",
-            EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Session') AS "session"
-        `) as Array<{ user: boolean; authIdentity: boolean; session: boolean }>;
-        databaseAuthSchemaTables = rows?.[0] || {};
-        databaseAuthSchemaConfigured = Boolean(rows?.[0]?.user && rows?.[0]?.authIdentity && rows?.[0]?.session);
-      } catch (error) {
-        console.error('[health] auth schema check failed', error);
-      }
-    }
     return json(req, res, 200, {
-      ok: true,
-      version: '2.0.0-admin-ops',
-      build: 120,
+      status: 'ok',
+      service: 'lousa-moon-api',
+      version: '1.18.22',
+      build: 133,
       appEnv: env.appEnv,
-      databaseConfigured: Boolean(env.databaseUrl),
-      databaseAuthSchemaConfigured,
-      databaseAuthSchemaTables,
-      redisConfigured: Boolean(env.redisUrl),
-      redisRequired: env.requireRedis,
-      firebaseProjectConfigured: Boolean(env.firebaseProjectId),
-      firebaseAdminConfigured: Boolean(env.firebaseServiceAccountJson || env.firebaseApplicationCredentials || (env.firebaseClientEmail && env.firebasePrivateKey)),
-      firebaseRestConfigured: Boolean(env.firebaseProjectId && env.firebaseWebApiKey),
-      emailDeliveryConfigured: isEmailDeliveryConfigured(),
-      emailDeliveryMode: getEmailDeliveryMode(),
-      mapsProvider: env.mapTilerApiKey ? 'maptiler' : env.googleMapsServerApiKey ? 'google' : 'none',
-      mapTilerConfigured: Boolean(env.mapTilerApiKey),
-      googleMapsConfigured: Boolean(env.googleMapsServerApiKey),
-      paymentProvider: env.paymentProvider,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  if (method === 'GET' && pathname === '/ready') {
+    const checks: JsonObject = {
+      database: 'unknown',
+      authSchema: 'unknown',
+      redis: env.requireRedis ? 'unknown' : (env.redisUrl ? 'optional' : 'not_required'),
+      firebaseAdmin: 'unknown',
+    };
+    const problems: string[] = [];
+    try {
+      await withServerTimeout(prisma.$queryRawUnsafe('SELECT 1'), 4_000, 'Database readiness');
+      checks.database = 'ok';
+      const rows = await withServerTimeout(prisma.$queryRawUnsafe(`
+        SELECT
+          EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'User') AS "user",
+          EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthIdentity') AS "authIdentity",
+          EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Session') AS "session"
+      `) as Promise<Array<{ user: boolean; authIdentity: boolean; session: boolean }>>, 4_000, 'Auth schema readiness');
+      const schemaReady = Boolean(rows?.[0]?.user && rows?.[0]?.authIdentity && rows?.[0]?.session);
+      checks.authSchema = schemaReady ? 'ok' : 'missing';
+      if (!schemaReady) problems.push('AUTH_SCHEMA_MISSING');
+    } catch (error) {
+      checks.database = 'failed';
+      checks.authSchema = 'failed';
+      problems.push('DATABASE_UNAVAILABLE');
+      console.error('[ready] database check failed', { requestId: req.requestId, error });
+    }
+
+    try {
+      if (env.redisUrl) {
+        const pong = await withServerTimeout(redis.command(['PING']), 3_000, 'Redis readiness');
+        checks.redis = pong === 'PONG' ? 'ok' : 'failed';
+        if (env.requireRedis && pong !== 'PONG') problems.push('REDIS_UNAVAILABLE');
+      } else if (env.requireRedis) {
+        checks.redis = 'missing';
+        problems.push('REDIS_MISSING');
+      }
+    } catch (error) {
+      checks.redis = 'failed';
+      if (env.requireRedis) problems.push('REDIS_UNAVAILABLE');
+      console.error('[ready] redis check failed', { requestId: req.requestId, error });
+    }
+
+    try {
+      const verifier = await checkFirebaseVerifierReady(env);
+      checks.firebaseAdmin = verifier.mode;
+    } catch (error) {
+      checks.firebaseAdmin = 'failed';
+      problems.push('FIREBASE_ADMIN_UNAVAILABLE');
+      console.error('[ready] Firebase verifier check failed', { requestId: req.requestId, error });
+    }
+
+    const ready = problems.length === 0;
+    return json(req, res, ready ? 200 : 503, {
+      status: ready ? 'ready' : 'not_ready',
+      service: 'lousa-moon-api',
+      version: '1.18.22',
+      build: 133,
+      checks,
+      problems,
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -2161,13 +2378,31 @@ async function router(req: AuthedRequest, res: ServerResponse) {
 
   if (method === 'POST' && pathname === '/v1/auth/firebase/session') {
     await rateLimit(`firebase-session:${req.socket.remoteAddress}`, 30, 300);
+    const startedAt = Date.now();
     const body = await readJson(req);
-    const idToken = str(body.idToken, 12000);
-    if (!idToken) throw new ApiError(400, 'FIREBASE_ID_TOKEN_REQUIRED', 'Firebase ID token is required.');
-    return json(req, res, 200, await sessionFromFirebaseIdToken(idToken, req, {
-      ...(body.profile || {}),
-      provider: body.provider,
-    }));
+    const idToken = str(getBearer(req) || body.idToken, 12000);
+    if (!idToken) throw new ApiError(401, 'FIREBASE_ID_TOKEN_REQUIRED', 'Firebase ID token is required in Authorization: Bearer.');
+    try {
+      const payload = await sessionFromFirebaseIdToken(idToken, req, {
+        ...(body.profile || {}),
+        provider: body.provider,
+      });
+      console.info('[firebase-auth] session created', {
+        requestId: req.requestId,
+        durationMs: Date.now() - startedAt,
+        appVersion: req.headers['x-app-version'],
+        appBuild: req.headers['x-app-build'],
+        appPackage: req.headers['x-app-package'],
+      });
+      return json(req, res, 200, payload);
+    } catch (error) {
+      console.error('[firebase-auth] session failed', {
+        requestId: req.requestId,
+        durationMs: Date.now() - startedAt,
+        code: error instanceof ApiError ? error.code : 'UNEXPECTED',
+      });
+      throw error;
+    }
   }
 
   const legacyAuthRoutes = new Set([
@@ -2394,8 +2629,58 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     return json(req, res, 200, { ok: true });
   }
 
+  const paymentWebhookMatch = pathname.match(/^\/v1\/payments\/webhooks\/([^/]+)$/);
+  if (paymentWebhookMatch && method === 'POST') {
+    const providerName = paymentWebhookMatch[1];
+    if (providerName !== env.paymentProvider) throw new ApiError(404, 'PAYMENT_PROVIDER_NOT_FOUND', 'Unknown payment provider.');
+    const rawBody = await readRawBody(req);
+    const signature = str(req.headers['x-lousa-signature'] || req.headers['x-payment-signature'], 500);
+    const signatureVerified = paymentProvider.verifyWebhook(rawBody, signature);
+    if (!signatureVerified) throw new ApiError(401, 'PAYMENT_WEBHOOK_SIGNATURE_INVALID', 'Payment webhook signature is invalid.');
+    let body: any;
+    try { body = rawBody ? JSON.parse(rawBody) : {}; } catch { throw new ApiError(400, 'INVALID_JSON', 'Invalid JSON body.'); }
+    const providerEventId = str(body.id || body.eventId, 160);
+    const eventType = str(body.type, 120);
+    const providerIntentId = str(body.providerIntentId || body.data?.providerIntentId, 160);
+    if (!providerEventId || !eventType || !providerIntentId) throw new ApiError(400, 'PAYMENT_WEBHOOK_INVALID', 'Webhook id, type and providerIntentId are required.');
+    const existingEvent = await (prisma as any).paymentEvent.findUnique({ where: { providerEventId } });
+    if (existingEvent) return json(req, res, 200, { ok: true, duplicate: true });
+    const intent = await (prisma as any).paymentIntent.findUnique({ where: { providerIntentId }, include: { order: true } });
+    if (!intent) throw new ApiError(404, 'PAYMENT_INTENT_NOT_FOUND', 'Payment intent was not found.');
+    const payloadHash = createHash('sha256').update(rawBody).digest('hex');
+    await prisma.$transaction(async (tx: any) => {
+      await tx.paymentEvent.create({ data: { orderId: intent.orderId, paymentIntentId: intent.id, provider: providerName, providerEventId, type: eventType, data: body, payloadHash, signatureVerified: true, processedAt: now() } });
+      if (eventType === 'payment_intent.succeeded') {
+        await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: 'payment_succeeded' } });
+        await tx.order.update({ where: { id: intent.orderId }, data: { status: 'PAID', paymentStatus: 'PAID' } });
+      } else if (eventType === 'payment_intent.failed' || eventType === 'payment_intent.cancelled') {
+        await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: eventType.endsWith('cancelled') ? 'payment_cancelled' : 'payment_failed' } });
+        await tx.order.update({ where: { id: intent.orderId }, data: { paymentStatus: 'FAILED' } });
+      } else if (eventType === 'payment_intent.refunded') {
+        await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: 'payment_refunded' } });
+        await tx.order.update({ where: { id: intent.orderId }, data: { status: 'REFUNDED', paymentStatus: 'REFUNDED' } });
+      } else if (eventType === 'payment_intent.disputed') {
+        await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: 'payment_disputed' } });
+        await tx.order.update({ where: { id: intent.orderId }, data: { paymentStatus: 'DISPUTED' } });
+      }
+    });
+    return json(req, res, 200, { ok: true });
+  }
+
   const user = pathname.startsWith('/v1/') ? await requireUser(req) : null;
 
+  if (method === 'GET' && pathname === '/v1/profile') {
+    return json(req, res, 200, { user: userPayload(user) });
+  }
+
+  if (method === 'GET' && pathname === '/v1/auth/sessions') {
+    const sessions = await (prisma as any).session.findMany({
+      where: { userId: user.id, revokedAt: null, expiresAt: { gt: now() } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, deviceId: true, deviceName: true, lastIp: true, createdAt: true, expiresAt: true },
+    });
+    return json(req, res, 200, { items: sessions });
+  }
 
   if (method === 'GET' && pathname === '/v1/app/admin-v2-2-sync/health') {
     return json(req, res, 200, {
@@ -2463,6 +2748,20 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: appTicketMatch[1], userId: user.id }, include: { order: true, messages: { orderBy: { createdAt: 'asc' } } } });
     if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение не найдено.');
     return json(req, res, 200, supportTicketDto(ticket, false));
+  }
+
+  const appTicketCloseMatch = pathname.match(/^\/v1\/support\/tickets\/([^/]+)\/close$/);
+  if (appTicketCloseMatch && method === 'POST') {
+    const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: appTicketCloseMatch[1], userId: user.id }, include: { order: true, messages: { orderBy: { createdAt: 'asc' } } } });
+    if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение не найдено.');
+    if (['RESOLVED', 'CLOSED'].includes(ticket.status)) return json(req, res, 200, supportTicketDto(ticket, false));
+    const updated = await (prisma as any).supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: 'CLOSED', updatedAt: now() },
+      include: { order: true, messages: { orderBy: { createdAt: 'asc' } } },
+    });
+    await (prisma as any).auditLog.create({ data: { actorId: user.id, actorRole: 'CUSTOMER', action: 'SUPPORT_TICKET_CLOSED', entityType: 'SupportTicket', entityId: ticket.id } }).catch(() => null);
+    return json(req, res, 200, supportTicketDto(updated, false));
   }
 
   const appTicketMessageMatch = pathname.match(/^\/v1\/support\/tickets\/([^/]+)\/messages$/);
@@ -2753,6 +3052,11 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     const deliveryAddressId = order.deliveryAddressId || optionalStr(body.deliveryAddressId, 80);
     if (!deliveryAddressId) throw new ApiError(409, 'DELIVERY_ADDRESS_REQUIRED', 'Для подписки нужен подтверждённый адрес доставки.');
     const existing = await (prisma as any).subscription.findFirst({ where: { userId: user.id, cancelledAt: null }, orderBy: { createdAt: 'desc' } });
+    const schedule = calculateSubscriptionSchedule({
+      now: now(),
+      preferredDeliveryDate: optionalStr(body.preferredDeliveryDate, 10),
+      preferredWeekday: body.preferredWeekday === undefined ? null : int(body.preferredWeekday, -1),
+    });
     const data = {
       ...(existing?.data || {}),
       orderId: order.id,
@@ -2760,6 +3064,9 @@ async function router(req: AuthedRequest, res: ServerResponse) {
       activatedFromPaidOrderAt: now().toISOString(),
       deliveryIncludedInPlan: true,
       deliveryFeeMinor: 0,
+      scheduleVersion: schedule.scheduleVersion,
+      scheduleCalculationReason: schedule.calculationReason,
+      clientPreferredDeliveryDate: optionalStr(body.preferredDeliveryDate, 10),
     };
     const payload = {
       plan,
@@ -2768,9 +3075,9 @@ async function router(req: AuthedRequest, res: ServerResponse) {
       skipNextBox: false,
       deliveryAddressId,
       deliveryWindow: optionalStr(body.deliveryWindow, 80),
-      nextBillingDate: body.nextBillingDate ? new Date(body.nextBillingDate) : null,
-      nextPreparationDate: body.nextPreparationDate ? new Date(body.nextPreparationDate) : null,
-      nextDeliveryDate: body.nextDeliveryDate ? new Date(body.nextDeliveryDate) : null,
+      nextBillingDate: schedule.nextBillingDate,
+      nextPreparationDate: schedule.nextPreparationDate,
+      nextDeliveryDate: schedule.nextDeliveryDate,
       cancelledAt: null,
       data,
     };
@@ -2798,7 +3105,20 @@ async function router(req: AuthedRequest, res: ServerResponse) {
       update = { status: 'paused', pauseUntil: null, skipNextBox: false, data: { ...baseData, pauseMode: 'indefinite', pauseUntil: null } };
     } else if (action === 'skip_next') {
       if (currentStatus !== 'active') throw new ApiError(409, 'SUBSCRIPTION_MUST_BE_ACTIVE', 'Сначала возобновите подписку.');
-      update = { skipNextBox: true, data: { ...baseData, skipNextRequestedAt: now().toISOString() } };
+      if (!subscription.nextDeliveryDate) throw new ApiError(409, 'SUBSCRIPTION_SCHEDULE_MISSING', 'Дата следующей доставки не рассчитана.');
+      const schedule = advanceSubscriptionSchedule(subscription.nextDeliveryDate, { now: now() });
+      update = {
+        skipNextBox: true,
+        nextBillingDate: schedule.nextBillingDate,
+        nextPreparationDate: schedule.nextPreparationDate,
+        nextDeliveryDate: schedule.nextDeliveryDate,
+        data: {
+          ...baseData,
+          skipNextRequestedAt: now().toISOString(),
+          scheduleVersion: schedule.scheduleVersion,
+          scheduleCalculationReason: 'skip_next_box',
+        },
+      };
     } else if (action === 'resume') {
       update = { status: 'active', pauseUntil: null, skipNextBox: false, data: { ...baseData, pauseMode: null, pauseUntil: null, resumedAt: now().toISOString() } };
     } else if (action === 'cancel') {
@@ -2820,6 +3140,8 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     const body = await readJson(req);
     const validated = validateAddress(body);
     const zone = await checkDeliveryZone(validated.latitude, validated.longitude);
+    const providerPlaceId = optionalStr(body.providerPlaceId, 120);
+    const fieldOrigins = buildAddressFieldOrigins({ body, providerPlaceId });
     if (bool(body.isDefault)) await (prisma as any).deliveryAddress.updateMany({ where: { userId: user.id, isDefault: true }, data: { isDefault: false } });
     const record = await (prisma as any).deliveryAddress.create({ data: {
       userId: user.id,
@@ -2855,7 +3177,8 @@ async function router(req: AuthedRequest, res: ServerResponse) {
       longitude: validated.longitude,
       formattedAddress: validated.formattedAddress,
       provider: str(body.provider || 'google', 40),
-      providerPlaceId: optionalStr(body.providerPlaceId, 120),
+      providerPlaceId,
+      fieldOrigins,
       deliveryZoneId: zone.zoneId,
       deliveryFeeMinor: 0,
       estimatedMinutes: zone.etaMin,
@@ -2868,7 +3191,17 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     } });
     return json(req, res, 200, record);
   }
-  const addressMatch = pathname.match(/^\/v1\/delivery-addresses\/([^/]+)(?:\/(set-default))?$/);
+  const addressDefaultMatch = pathname.match(/^\/v1\/delivery-addresses\/([^/]+)\/set-default$/);
+  if (addressDefaultMatch && method === 'POST') {
+    const existingAddress = await (prisma as any).deliveryAddress.findFirst({ where: { id: addressDefaultMatch[1], userId: user.id } });
+    if (!existingAddress) throw new ApiError(404, 'ADDRESS_NOT_FOUND', 'Адрес не найден.');
+    await prisma.$transaction(async (tx: any) => {
+      await tx.deliveryAddress.updateMany({ where: { userId: user.id, isDefault: true }, data: { isDefault: false } });
+      await tx.deliveryAddress.update({ where: { id: existingAddress.id }, data: { isDefault: true } });
+    });
+    return json(req, res, 200, { ok: true });
+  }
+  const addressMatch = pathname.match(/^\/v1\/delivery-addresses\/([^/]+)$/);
   if (addressMatch && method === 'PATCH') {
     const body = await readJson(req);
     const existingAddress = await (prisma as any).deliveryAddress.findFirst({ where: { id: addressMatch[1], userId: user.id } });
@@ -2876,6 +3209,15 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     const merged = { ...existingAddress, ...body };
     const validated = validateAddress(merged);
     const zone = await checkDeliveryZone(validated.latitude, validated.longitude, optionalStr(body.planCode, 80) || existingAddress.planCode);
+    const explicitlyChangedFields = ['country','region','city','district','street','house','postalCode']
+      .filter((field) => Object.prototype.hasOwnProperty.call(body, field) && String(body[field] ?? '') !== String((existingAddress as any)[field] ?? ''));
+    const providerPlaceId = optionalStr(merged.providerPlaceId, 120);
+    const fieldOrigins = buildAddressFieldOrigins({
+      body: merged,
+      existing: existingAddress.fieldOrigins && typeof existingAddress.fieldOrigins === 'object' ? existingAddress.fieldOrigins : {},
+      providerPlaceId,
+      explicitlyChangedFields,
+    });
     if (bool(merged.isDefault)) {
       await (prisma as any).deliveryAddress.updateMany({ where: { userId: user.id, isDefault: true, id: { not: existingAddress.id } }, data: { isDefault: false } });
     }
@@ -2914,7 +3256,8 @@ async function router(req: AuthedRequest, res: ServerResponse) {
         longitude: validated.longitude,
         formattedAddress: validated.formattedAddress,
         provider: str(merged.provider || 'device', 40),
-        providerPlaceId: optionalStr(merged.providerPlaceId, 120),
+        providerPlaceId,
+        fieldOrigins,
         deliveryZoneId: zone.zoneId,
         deliveryFeeMinor: 0,
         estimatedMinutes: zone.etaMin,
@@ -2931,11 +3274,6 @@ async function router(req: AuthedRequest, res: ServerResponse) {
   }
   if (addressMatch && method === 'DELETE') {
     await (prisma as any).deliveryAddress.deleteMany({ where: { id: addressMatch[1], userId: user.id } });
-    return json(req, res, 200, { ok: true });
-  }
-  if (addressMatch && addressMatch[2] === 'set-default' && method === 'POST') {
-    await (prisma as any).deliveryAddress.updateMany({ where: { userId: user.id, isDefault: true }, data: { isDefault: false } });
-    await (prisma as any).deliveryAddress.updateMany({ where: { userId: user.id, id: addressMatch[1] }, data: { isDefault: true } });
     return json(req, res, 200, { ok: true });
   }
 
@@ -3002,21 +3340,47 @@ async function router(req: AuthedRequest, res: ServerResponse) {
         if (reserved.count !== 1) throw new ApiError(409, 'INVENTORY_CONFLICT', 'Склад изменился во время оформления. Повторите расчёт.');
       }
       await tx.orderQuote.update({ where: { id: quote.id, usedAt: null }, data: { usedAt: now() } });
-      await tx.deliveryTask.create({ data: { orderId: created.id, status: 'CREATED', safePayload: { orderCode: created.id.slice(0, 8), formattedAddress: quote.deliveryAddress?.formattedAddress, recipientName: quote.deliveryAddress?.recipientName, phone: quote.deliveryAddress?.phone, handoff } } });
+      await tx.deliveryTask.create({ data: { orderId: created.id, status: 'CREATED', safePayload: { orderCode: created.id.slice(0, 8), formattedAddress: quote.deliveryAddress?.formattedAddress, recipientName: quote.deliveryAddress?.recipientName, phone: quote.deliveryAddress?.phone, latitude: quote.deliveryAddress?.latitude, longitude: quote.deliveryAddress?.longitude, handoffType: handoff.type || quote.deliveryAddress?.handoffType, instructions: sanitizeCourierInstructions(handoff.note || quote.deliveryAddress?.instructions) } } });
       return tx.order.findUnique({ where: { id: created.id }, include: { items: { include: { product: true } }, quote: true } });
     }, { isolationLevel: 'Serializable' });
     return json(req, res, 200, orderFromDb(order));
   }
 
+  const orderFeedbackMatch = pathname.match(/^\/v1\/orders\/([^/]+)\/feedback$/);
+  if (orderFeedbackMatch && method === 'POST') {
+    const order = await (prisma as any).order.findFirst({ where: { id: orderFeedbackMatch[1], userId: user.id, deletedAt: null } });
+    if (!order) throw new ApiError(404, 'ORDER_NOT_FOUND', 'Заказ не найден.');
+    if (order.status !== 'DELIVERED') throw new ApiError(409, 'FEEDBACK_NOT_AVAILABLE', 'Отзыв можно оставить после доставки заказа.');
+    const body = await readJson(req);
+    const rating = (value: unknown) => { const n = int(value, 0); return n >= 1 && n <= 5 ? n : null; };
+    const stringList = (value: unknown) => Array.isArray(value) ? value.map((item) => str(item, 120)).filter(Boolean).slice(0, 40) : [];
+    const data = {
+      orderId: order.id,
+      enoughItems: typeof body.enoughItems === 'boolean' ? body.enoughItems : null,
+      tooFewCategories: stringList(body.tooFewCategories),
+      tooManyCategories: stringList(body.tooManyCategories),
+      likedItems: stringList(body.likedItems),
+      removeItems: stringList(body.removeItems),
+      allergyReaction: typeof body.allergyReaction === 'boolean' ? body.allergyReaction : null,
+      irritationReaction: typeof body.irritationReaction === 'boolean' ? body.irritationReaction : null,
+      packagingRating: rating(body.packagingRating),
+      deliveryRating: rating(body.deliveryRating),
+      note: str(body.note, 1000),
+      createdAt: str(body.createdAt, 40) || now().toISOString(),
+    };
+    const saved = await (prisma as any).orderFeedback.upsert({
+      where: { orderId: order.id },
+      update: { data },
+      create: { orderId: order.id, data },
+    });
+    return json(req, res, 200, { ...data, createdAt: saved.createdAt.toISOString() });
+  }
+
   if (method === 'GET' && pathname === '/v1/payments/methods') {
-    if (env.paymentProvider !== 'sandbox') {
-      throw new ApiError(503, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Платёжный провайдер ещё не подключён. Оформление остановлено.');
-    }
-    return json(req, res, 200, { items: [{ id: 'sandbox-card-4242', type: 'sandbox_card', brand: 'LOUSA Test Card', last4: '4242', expiresMonth: 12, expiresYear: 2030, demo: true }] });
+    return json(req, res, 200, { items: await paymentProvider.listPaymentMethods() });
   }
 
   if (method === 'POST' && pathname === '/v1/payments/intents') {
-    if (env.paymentProvider !== 'sandbox') throw new ApiError(503, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Реальный платёжный провайдер ещё не подключён.');
     const body = await readJson(req);
     const orderId = str(body.orderId, 80);
     const idempotencyKey = str(req.headers['idempotency-key'] || body.idempotencyKey || randomUUID(), 120);
@@ -3025,28 +3389,42 @@ async function router(req: AuthedRequest, res: ServerResponse) {
     if (order.status !== 'PENDING_PAYMENT') throw new ApiError(409, 'ORDER_NOT_PAYABLE', 'Заказ сейчас нельзя оплатить.');
     let intent = await (prisma as any).paymentIntent.findUnique({ where: { idempotencyKey } });
     if (!intent) {
-      const providerIntentId = `sandbox_${randomUUID()}`;
-      intent = await (prisma as any).paymentIntent.create({ data: { orderId: order.id, provider: env.paymentProvider, providerIntentId, idempotencyKey, status: 'requires_confirmation', amountMinor: order.totalMinor, currency: order.currency, clientSecret: env.paymentProvider === 'sandbox' ? `sandbox_secret_${providerIntentId}` : null, data: { sandbox: env.paymentProvider === 'sandbox' } } });
+      const providerResult = await paymentProvider.createIntent({ orderId: order.id, amountMinor: order.totalMinor, currency: order.currency, idempotencyKey });
+      intent = await (prisma as any).paymentIntent.create({ data: { orderId: order.id, provider: env.paymentProvider, providerIntentId: providerResult.providerIntentId, idempotencyKey, status: providerResult.status, amountMinor: order.totalMinor, currency: order.currency, clientSecret: providerResult.clientSecret, data: { demo: providerResult.demo, requiresActionUrl: providerResult.requiresActionUrl || null } } });
     }
     return json(req, res, 200, { id: intent.id, providerIntentId: intent.providerIntentId, status: intent.status, amountMinor: intent.amountMinor, currency: intent.currency, clientSecret: intent.clientSecret, demo: env.paymentProvider === 'sandbox' });
   }
   const paymentConfirm = pathname.match(/^\/v1\/payments\/intents\/([^/]+)\/confirm$/);
   if (paymentConfirm && method === 'POST') {
-    if (env.paymentProvider !== 'sandbox') throw new ApiError(503, 'PAYMENT_PROVIDER_NOT_CONFIGURED', 'Реальное подтверждение платежа ещё не подключено.');
     const intent = await (prisma as any).paymentIntent.findFirst({ where: { id: paymentConfirm[1] }, include: { order: true } });
     if (!intent || intent.order.userId !== user.id) throw new ApiError(404, 'PAYMENT_INTENT_NOT_FOUND', 'Платёж не найден.');
-    await (prisma as any).paymentIntent.update({ where: { id: intent.id }, data: { status: 'succeeded' } });
-    await (prisma as any).order.update({ where: { id: intent.orderId }, data: { status: 'PAID', paymentStatus: 'PAID' } });
-    await (prisma as any).paymentEvent.create({ data: { orderId: intent.orderId, paymentIntentId: intent.id, provider: intent.provider, providerEventId: `sandbox_event_${randomUUID()}`, type: 'payment_intent.succeeded', data: { sandbox: true } } });
-    return json(req, res, 200, { id: intent.id, providerIntentId: intent.providerIntentId, status: 'succeeded', amountMinor: intent.amountMinor, currency: intent.currency, demo: true });
+    const body = await readJson(req);
+    const providerResult = await paymentProvider.confirmIntent({ providerIntentId: intent.providerIntentId, paymentMethodId: str(body.paymentMethodId || 'sandbox-card-4242', 160) });
+    if (providerResult.status === 'payment_succeeded') {
+      await prisma.$transaction(async (tx: any) => {
+        await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: providerResult.status, clientSecret: null } });
+        await tx.order.update({ where: { id: intent.orderId }, data: { status: 'PAID', paymentStatus: 'PAID' } });
+        await tx.paymentEvent.create({ data: { orderId: intent.orderId, paymentIntentId: intent.id, provider: intent.provider, providerEventId: `direct_${randomUUID()}`, type: 'payment_intent.succeeded', signatureVerified: paymentProvider.demo, processedAt: now(), data: { demo: providerResult.demo } } });
+      });
+    }
+    return json(req, res, 200, { id: intent.id, providerIntentId: intent.providerIntentId, status: providerResult.status, amountMinor: intent.amountMinor, currency: intent.currency, demo: providerResult.demo });
   }
   const paymentRefund = pathname.match(/^\/v1\/payments\/intents\/([^/]+)\/refund$/);
   if (paymentRefund && method === 'POST') {
     const intent = await (prisma as any).paymentIntent.findFirst({ where: { id: paymentRefund[1] }, include: { order: true } });
     if (!intent || intent.order.userId !== user.id) throw new ApiError(404, 'PAYMENT_INTENT_NOT_FOUND', 'Платёж не найден.');
-    await (prisma as any).paymentIntent.update({ where: { id: intent.id }, data: { status: 'refunded' } });
-    await (prisma as any).order.update({ where: { id: intent.orderId }, data: { status: 'REFUNDED', paymentStatus: 'REFUNDED' } });
-    return json(req, res, 200, { id: `refund_${randomUUID()}`, intentId: intent.id, amountMinor: intent.amountMinor, status: 'succeeded', reason: 'sandbox' });
+    const body = await readJson(req);
+    const amountMinor = Math.min(Math.max(1, int(body.amountMinor, intent.amountMinor)), intent.amountMinor);
+    const refund = await paymentProvider.refund({ providerIntentId: intent.providerIntentId, amountMinor, reason: optionalStr(body.reason, 240) || undefined });
+    if (refund.status === 'succeeded') {
+      const full = amountMinor >= intent.amountMinor;
+      await prisma.$transaction(async (tx: any) => {
+        await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: full ? 'payment_refunded' : 'payment_partially_refunded' } });
+        await tx.order.update({ where: { id: intent.orderId }, data: full ? { status: 'REFUNDED', paymentStatus: 'REFUNDED' } : { paymentStatus: 'PARTIALLY_REFUNDED' } });
+        await tx.paymentEvent.create({ data: { orderId: intent.orderId, paymentIntentId: intent.id, provider: intent.provider, providerEventId: refund.providerRefundId, type: full ? 'payment_intent.refunded' : 'payment_intent.partially_refunded', signatureVerified: paymentProvider.demo, processedAt: now(), data: { amountMinor, reason: optionalStr(body.reason, 240), demo: refund.demo } } });
+      });
+    }
+    return json(req, res, 200, { id: refund.providerRefundId, intentId: intent.id, amountMinor: refund.amountMinor, status: refund.status, reason: optionalStr(body.reason, 240), demo: refund.demo });
   }
 
   if (method === 'GET' && pathname === '/v1/account/export') {
@@ -3091,7 +3469,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(env.port, env.apiHost, async () => {
-  if (env.appEnv !== 'production') {
+  if (env.appEnv === 'development' || env.appEnv === 'test') {
     try {
       await ensureDemoUser();
       await ensureCatalog();

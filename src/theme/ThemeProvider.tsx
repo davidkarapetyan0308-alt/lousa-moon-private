@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useCallback } from 'react';
-import { Colors, Typography, Spacing, Rounded, Elevation, ThemeName, Themes } from './tokens';
+import React, { createContext, useContext, useCallback, useEffect } from 'react';
+import { Colors, Typography, Spacing, Rounded, Elevation, ThemeName, Themes, normalizeThemeName } from './tokens';
 import { useUserStore } from '../store';
 
 interface ThemeContextType {
@@ -19,13 +19,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const storeTheme = useUserStore((s) => s.theme);
   const setStoreTheme = useUserStore((s) => s.setTheme);
 
-  // If theme is not loaded yet or set, default to rose_gold
-  const currentTheme = storeTheme || 'rose_gold';
+  // Persisted data from older builds can contain removed theme identifiers.
+  // Normalize before indexing Themes so an old value can never crash startup.
+  const currentTheme = normalizeThemeName(storeTheme);
   const isDark = currentTheme === 'midnight_moon';
-  const colors = isDark ? Colors.dark : Themes[currentTheme].colors;
+  const colors = Themes[currentTheme]?.colors || Colors.light;
+
+  useEffect(() => {
+    if (storeTheme !== currentTheme) setStoreTheme(currentTheme);
+  }, [currentTheme, setStoreTheme, storeTheme]);
 
   const setTheme = useCallback((name: ThemeName) => {
-    setStoreTheme(name);
+    setStoreTheme(normalizeThemeName(name));
   }, [setStoreTheme]);
 
   return (

@@ -29,8 +29,10 @@ export interface ApiEnv {
   firebasePrivateKey: string | null;
   firebaseServiceAccountJson: string | null;
   firebaseApplicationCredentials: string | null;
+  allowFirebaseRestFallback: boolean;
   paymentProvider: string;
   paymentSecretKey: string | null;
+  paymentWebhookSecret: string | null;
   publicApiUrl: string | null;
   verificationCodeTtlMinutes: number;
   deliveryZoneRadiusKm: number;
@@ -95,17 +97,33 @@ export function loadApiEnv(): ApiEnv {
   const firebasePrivateKey = raw('FIREBASE_PRIVATE_KEY') || null;
   const firebaseServiceAccountJson = raw('FIREBASE_SERVICE_ACCOUNT_JSON') || null;
   const firebaseApplicationCredentials = raw('GOOGLE_APPLICATION_CREDENTIALS') || null;
+  const allowFirebaseRestFallback = raw('ALLOW_FIREBASE_REST_FALLBACK') === 'true' && (appEnv === 'development' || appEnv === 'test');
   const mapTilerApiKey = raw('MAPTILER_API_KEY') || raw('EXPO_PUBLIC_MAPTILER_API_KEY');
   const paymentProvider = raw('PAYMENT_PROVIDER') || 'sandbox';
   const paymentSecretKey = raw('PAYMENT_SECRET_KEY') || null;
+  const paymentWebhookSecret = raw('PAYMENT_WEBHOOK_SECRET') || null;
   const publicApiUrl = resolvePublicApiUrl(raw('PUBLIC_API_URL'), raw('RENDER_EXTERNAL_HOSTNAME'));
 
   assertNotPlaceholder('JWT_ACCESS_SECRET', jwtAccessSecret, appEnv);
   assertNotPlaceholder('JWT_REFRESH_SECRET', jwtRefreshSecret, appEnv);
   assertNotPlaceholder('DATABASE_URL', databaseUrl, appEnv);
+  if (appEnv === 'staging' || appEnv === 'production') {
+    if (!raw('DATABASE_URL')) throw new Error('DATABASE_URL is required in staging/production.');
+    if (!raw('JWT_ACCESS_SECRET')) throw new Error('JWT_ACCESS_SECRET is required in staging/production.');
+    if (!raw('JWT_REFRESH_SECRET')) throw new Error('JWT_REFRESH_SECRET is required in staging/production.');
+    if (!publicApiUrl) throw new Error('PUBLIC_API_URL is required in staging/production.');
+    if (authProvider === 'firebase') {
+      if (!firebaseProjectId) throw new Error('FIREBASE_PROJECT_ID is required when AUTH_PROVIDER=firebase.');
+      if (!firebaseServiceAccountJson && !firebaseApplicationCredentials && !(firebaseClientEmail && firebasePrivateKey)) {
+        throw new Error('Firebase Admin credentials are required in staging/production.');
+      }
+    }
+  }
   if (appEnv === 'production') {
     if (!publicApiUrl) throw new Error('PUBLIC_API_URL is required in production.');
-    if (paymentProvider !== 'sandbox' && !paymentSecretKey) throw new Error('PAYMENT_SECRET_KEY is required for non-sandbox payments.');
+    if (paymentProvider === 'sandbox') throw new Error('PAYMENT_PROVIDER=sandbox is forbidden in production. Configure a real provider adapter.');
+    if (!paymentSecretKey) throw new Error('PAYMENT_SECRET_KEY is required for production payments.');
+    if (!paymentWebhookSecret) throw new Error('PAYMENT_WEBHOOK_SECRET is required for production payments.');
     if (authProvider === 'firebase') {
       if (!firebaseProjectId) throw new Error('FIREBASE_PROJECT_ID is required when AUTH_PROVIDER=firebase.');
       if (
@@ -150,8 +168,10 @@ export function loadApiEnv(): ApiEnv {
     firebasePrivateKey,
     firebaseServiceAccountJson,
     firebaseApplicationCredentials,
+    allowFirebaseRestFallback,
     paymentProvider,
     paymentSecretKey,
+    paymentWebhookSecret,
     publicApiUrl,
     verificationCodeTtlMinutes: Number(raw('VERIFICATION_CODE_TTL_MINUTES') || 10),
     deliveryZoneRadiusKm: Number(raw('DELIVERY_ZONE_RADIUS_KM') || 15),

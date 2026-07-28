@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
@@ -6,7 +6,13 @@ import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import { RealisticMoon } from '../../src/components/RealisticMoon';
 import { ScreenScroll, TabbedScreen, useResponsiveLayout } from '../../src/components/layout';
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
-import { PressScale, StatusPill, SurfaceCard } from '../../src/components/ui';
+import {
+  HeroCard,
+  PrimaryButton,
+  SectionSurface,
+  StatusPill,
+  TextButton,
+} from '../../src/components/ui';
 import {
   useBoxStore,
   useCycleStore,
@@ -19,14 +25,12 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 import { LousaPalette } from '../../src/theme/designSystem';
 import { calculateCyclePrediction } from '../../src/services/cyclePrediction';
 import {
-  buildDailyInsight,
   buildImmediateCheckInResponse,
   calculateGentleProgress,
   selectTodayPriority,
-  shouldShowContextualBox,
 } from '../../src/services/engagement';
 import { getCycleData } from '../../src/utils/cycleEngine';
-import { fromLocalDateString, toLocalDateString } from '../../src/utils/date';
+import { differenceInLocalDays, fromLocalDateString, toLocalDateString } from '../../src/utils/date';
 import { getMoonPhase, getMoonPhaseLabel } from '../../src/utils/moonPhase';
 import { trackProductEvent } from '../../src/services/productAnalytics';
 import { buildPreparationWindowCopy, calculatePreparationWindow } from '../../src/services/preparationWindow';
@@ -39,7 +43,8 @@ const COPY = {
     forecastInsufficient: 'Отметьте дату начала последней менструации',
     forecastRange: 'Вероятный диапазон: {range}',
     forecastPassed: 'Прогнозируемое окно прошло. LOUSA не будет считать, что новый цикл начался без вашей отметки.',
-    cycleNeedsUpdate: 'Текущий день цикла не подтверждён',
+    cycleNeedsUpdate: 'Прогноз уточняется',
+    nextCycle: 'Следующий цикл — {date}', expectedIn: 'Ожидается примерно через {days}.', expectedToday: 'Ожидается примерно сегодня.', addAnotherDate: 'Добавьте ещё одну подтверждённую дату, чтобы расчёт стал точнее.',
     openCalendar: 'Уточнить в календаре',
     how: 'Как вы себя чувствуете?', howBody: 'Отметьте самочувствие. Запись можно изменить в любой момент.', detail: 'Добавить запись', change: 'Изменить',
     moods: { calm: 'Спокойно', happy: 'Хорошо', tired: 'Устала', anxious: 'Тревожно', irritable: 'Раздражённо' },
@@ -55,7 +60,8 @@ const COPY = {
     forecastInsufficient: 'Add the first period start date',
     forecastRange: 'Your next period is most likely {range}',
     forecastPassed: 'The forecast window has passed. LOUSA will not assume a new cycle without your confirmation.',
-    cycleNeedsUpdate: 'The current cycle day is not confirmed',
+    cycleNeedsUpdate: 'Forecast is being refined',
+    nextCycle: 'Next period — {date}', expectedIn: 'Expected in about {days}.', expectedToday: 'Expected around today.', addAnotherDate: 'Add one more confirmed date to improve the forecast.',
     openCalendar: 'Update in calendar',
     how: 'How do you feel today?', howBody: 'Log a mood or add a short note. LOUSA will use it to notice gentle patterns.', detail: 'Add entry', change: 'Change',
     moods: { calm: 'Calm', happy: 'Good', tired: 'Tired', anxious: 'Anxious', irritable: 'Irritable' },
@@ -70,7 +76,8 @@ const COPY = {
     forecastInsufficient: 'Նշեք առաջին ամսաթիվը',
     forecastRange: 'Հաջորդ դաշտանը առավել հավանական է {range}',
     forecastPassed: 'Կանխատեսվող շրջանն անցել է։ LOUSA-ն նոր ցիկլ չի հաստատի առանց ձեր նշման։',
-    cycleNeedsUpdate: 'Ցիկլի ընթացիկ օրը հաստատված չէ',
+    cycleNeedsUpdate: 'Կանխատեսումը ճշտվում է',
+    nextCycle: 'Հաջորդ ցիկլը՝ {date}', expectedIn: 'Սպասվում է մոտ {days} հետո։', expectedToday: 'Սպասվում է մոտավորապես այսօր։', addAnotherDate: 'Ավելացրեք ևս մեկ հաստատված ամսաթիվ՝ հաշվարկը ճշտելու համար։',
     openCalendar: 'Ճշտել օրացույցում',
     how: 'Ինչպե՞ս եք զգում այսօր', howBody: 'Նշեք տրամադրությունը կամ ավելացրեք կարճ գրառում։', detail: 'Ավելացնել գրառում', change: 'Փոխել',
     moods: { calm: 'Հանգիստ', happy: 'Լավ', tired: 'Հոգնած', anxious: 'Անհանգիստ', irritable: 'Գրգռված' },
@@ -103,6 +110,7 @@ function formatRange(start: string, end: string, language: 'ru' | 'en' | 'hy') {
   return start === end ? startText : `${startText}–${endText}`;
 }
 
+
 export default function TodayScreen() {
   const { colors, isDark } = useTheme();
   const { compactWidth } = useResponsiveLayout();
@@ -117,7 +125,6 @@ export default function TodayScreen() {
   const today = toLocalDateString();
   const todayLog = wellness.getLog(today);
   const [checkInMessage, setCheckInMessage] = useState<string | null>(null);
-  const [showSource, setShowSource] = useState(false);
 
   const prediction = useMemo(() => calculateCyclePrediction(cycleStore.periodRecords, {
     fallbackCycleLength: cycleStore.avgCycleLength,
@@ -134,9 +141,15 @@ export default function TodayScreen() {
     cycleStore.periodHistory.length,
     cycleStore.periodRecords,
     { cycleContext: cycleStore.onboardingProfile.cycleContext, factors: cycleStore.onboardingProfile.factors },
-  ), [cycleStore]);
+  ), [cycleStore.lastPeriodStart, cycleStore.avgCycleLength, cycleStore.avgPeriodLength, cycleStore.periodHistory.length, cycleStore.periodRecords, cycleStore.onboardingProfile.cycleContext, cycleStore.onboardingProfile.factors]);
   const moon = useMemo(() => getMoonPhase(new Date()), []);
-  const insight = useMemo(() => buildDailyInsight({ language, logs: wellness.dailyLogs, feedback: engagement.insightFeedback }), [language, wellness.dailyLogs, engagement.insightFeedback]);
+  const progress = useMemo(() => calculateGentleProgress({
+    logs: wellness.dailyLogs,
+    periods: cycleStore.periodRecords,
+    feedback: engagement.insightFeedback,
+    weeklySummariesOpened: engagement.weeklySummariesOpened,
+  }), [wellness.dailyLogs, cycleStore.periodRecords, engagement.insightFeedback, engagement.weeklySummariesOpened]);
+  const activeOrder = box.orders.find((order) => !['cancelled', 'refunded'].includes(order.status)) || null;
   const priority = useMemo(() => selectTodayPriority({
     language,
     migrationReviewRequired: cycleStore.migrationReviewRequired,
@@ -147,26 +160,16 @@ export default function TodayScreen() {
     orders: box.orders,
     feedbackOrderIds: box.feedback.map((item) => item.orderId),
   }), [language, cycleStore.migrationReviewRequired, prediction, todayLog, box.orders, box.feedback]);
-  const progress = useMemo(() => calculateGentleProgress({
-    logs: wellness.dailyLogs,
-    periods: cycleStore.periodRecords,
-    feedback: engagement.insightFeedback,
-    weeklySummariesOpened: engagement.weeklySummariesOpened,
-  }), [wellness.dailyLogs, cycleStore.periodRecords, engagement.insightFeedback, engagement.weeklySummariesOpened]);
-  const activeOrder = box.orders.find((order) => !['cancelled', 'refunded'].includes(order.status)) || null;
 
-  const confirmedPeriods = useMemo(() => cycleStore.periodRecords.filter((record) => record.confirmed && !record.deletedAt && !record.needsReview), [cycleStore.periodRecords]);
+  const confirmedPeriods = useMemo(
+    () => cycleStore.periodRecords.filter((record) => record.confirmed && !record.deletedAt && !record.needsReview),
+    [cycleStore.periodRecords],
+  );
   const hasCycleData = confirmedPeriods.length > 0;
   const displayName = name.trim().split(/\s+/)[0] || '';
   const cyclePositionKnown = hasCycleData && cycle.isCyclePositionKnown;
-  const hasFeedback = activeOrder ? box.feedback.some((item) => item.orderId === activeOrder.id) : false;
-  const showBox = shouldShowContextualBox({ order: activeOrder, hasFeedback });
   const preparationWindow = useMemo(() => calculatePreparationWindow(prediction), [prediction]);
   const preparationCopy = useMemo(() => buildPreparationWindowCopy(preparationWindow, language), [preparationWindow, language]);
-
-  useEffect(() => {
-    trackProductEvent('insight_viewed', { language, source: 'today', demo: useUserStore.getState().isDemoMode }).catch(() => {});
-  }, [insight.id, language]);
 
   const chooseMood = (mood: MoodType) => {
     wellness.setMood(today, mood);
@@ -175,14 +178,47 @@ export default function TodayScreen() {
     setCheckInMessage(buildImmediateCheckInResponse({ language, mood, logs: { ...wellness.dailyLogs, [today]: { ...todayLog, mood } }, communicationStyle }));
   };
 
-  const moonSize = compactWidth ? 68 : 76;
+  const moonSize = compactWidth ? 62 : 70;
   const moonPhaseLabel = getMoonPhaseLabel(moon.phase, language);
-
   const forecastText = prediction.expectedWindowPassed
     ? copy.forecastPassed
     : prediction.earliestStart && prediction.latestStart
       ? copy.forecastRange.replace('{range}', formatRange(prediction.earliestStart, prediction.latestStart, language))
       : copy.forecastInsufficient;
+
+  const mostLikelyDateText = prediction.mostLikelyStart
+    ? formatRange(prediction.mostLikelyStart, prediction.mostLikelyStart, language)
+    : '';
+  const daysUntilMostLikely = prediction.mostLikelyStart
+    ? differenceInLocalDays(fromLocalDateString(prediction.mostLikelyStart), fromLocalDateString(today))
+    : null;
+  const expectedTimingText = daysUntilMostLikely === null || daysUntilMostLikely < 0
+    ? forecastText
+    : daysUntilMostLikely === 0
+      ? copy.expectedToday
+      : copy.expectedIn.replace('{days}', language === 'en' ? `${daysUntilMostLikely} days` : language === 'hy' ? `${daysUntilMostLikely} օր` : `${daysUntilMostLikely} дн.`);
+
+  const cyclePrimaryLabel = cyclePositionKnown
+    ? copy.openCalendar
+    : hasCycleData
+      ? copy.openCalendar
+      : language === 'en'
+        ? 'Add date'
+        : language === 'hy'
+          ? 'Ավելացնել ամսաթիվ'
+          : 'Добавить дату';
+  const cyclePrimaryRoute = hasCycleData ? '/(tabs)/cycle' : '/screens/period-editor';
+
+  const orderTitle = activeOrder
+    ? activeOrder.status === 'out_for_delivery'
+      ? (language === 'en' ? 'Your Box is on the way' : language === 'hy' ? 'Ձեր Box-ը ճանապարհին է' : 'Ваш Box уже в пути')
+      : activeOrder.status === 'delivered'
+        ? (language === 'en' ? 'Your Box was delivered' : language === 'hy' ? 'Ձեր Box-ը առաքված է' : 'Ваш Box доставлен')
+        : (language === 'en' ? 'Your next LOUSA Box' : language === 'hy' ? 'Ձեր հաջորդ LOUSA Box-ը' : 'Ваш следующий LOUSA Box')
+    : preparationCopy.title;
+  const orderBody = activeOrder
+    ? (priority.description || preparationCopy.body)
+    : preparationCopy.body;
 
   return (
     <TabbedScreen backgroundVariant={isDark ? 'cosmic' : 'minimal'}>
@@ -191,92 +227,61 @@ export default function TodayScreen() {
           <Text style={[styles.greeting, compactWidth && styles.greetingCompact, { color: colors.onBackground }]}>
             {greetingForHour(copy)}{displayName ? `, ${displayName}` : ''}
           </Text>
-          <View style={styles.progressLine}>
-            <Text style={[styles.progressText, { color: colors.onSurfaceVariant }]}>{progress.careDaysThisMonth} {copy.careDays}</Text>
-            <View style={[styles.dot, { backgroundColor: colors.outlineVariant }]} />
-            <Text style={[styles.progressText, { color: colors.onSurfaceVariant }]}>{hasCycleData ? `${progress.confirmedCycles} ${language === 'en' ? copy.cycles : language === 'hy' ? copy.cycles : 'подтверждённых циклов'}` : copy.cycles}</Text>
-          </View>
+          <Text style={[styles.progressText, { color: colors.onSurfaceVariant }]}>
+            {progress.careDaysThisMonth} {copy.careDays} · {hasCycleData ? `${progress.confirmedCycles} ${language === 'en' ? 'confirmed cycles' : language === 'hy' ? 'հաստատված ցիկլ' : 'подтверждённых циклов'}` : copy.cycles}
+          </Text>
         </View>
 
-        <SurfaceCard padding={18} tone={isDark ? 'night' : 'default'} style={styles.cycleCard}>
-          <View style={styles.cycleCopy}>
-            {cyclePositionKnown ? (
-              <>
-                <Text style={[styles.cycleDay, { color: colors.onBackground }]}>{cycle.currentDay} {copy.dayOfCycle}</Text>
-                <Text style={[styles.phase, { color: colors.onSurfaceVariant }]}>{copy.phase[cycle.phase]}</Text>
-                <Text style={[styles.forecast, { color: colors.onBackground }]}>{forecastText}</Text>
-                <Text style={[styles.confidence, { color: colors.onSurfaceVariant }]}>{copy.confidence}: {copy.confidenceValues[prediction.confidence]}</Text>
-              </>
-            ) : hasCycleData ? (
-              <>
-                <Text style={[styles.cycleDay, { color: colors.onBackground }]}>{copy.cycleNeedsUpdate}</Text>
-                <Text style={[styles.forecast, styles.noDataForecast, { color: colors.onSurfaceVariant }]}>{copy.forecastPassed}</Text>
-                <PressScale onPress={() => router.push('/(tabs)/cycle')} style={styles.noDataButton}>
-                  <Text style={styles.noDataButtonText}>{copy.openCalendar}</Text>
-                  <MaterialSymbol name="arrow_forward" size={16} color={LousaPalette.berry} />
-                </PressScale>
-              </>
-            ) : (
-              <>
-                <Text style={[styles.cycleDay, { color: colors.onBackground }]}>
-                  {language === 'en' ? 'Cycle not set yet' : language === 'hy' ? 'Ցիկլը դեռ կարգավորված չէ' : 'Цикл пока не настроен'}
-                </Text>
-                <Text style={[styles.forecast, styles.noDataForecast, { color: colors.onSurfaceVariant }]}>
-                  {language === 'en'
-                    ? 'Add the start date of your last period — LOUSA will build a cautious forecast.'
-                    : language === 'hy'
-                      ? 'Նշեք վերջին դաշտանի սկիզբը, և LOUSA-ն կկազմի զգուշավոր կանխատեսում։'
-                      : 'Отметьте дату начала последней менструации — и LOUSA начнёт строить осторожный прогноз.'}
-                </Text>
-                <PressScale onPress={() => router.push('/screens/period-editor')} style={styles.noDataButton}>
-                  <Text style={styles.noDataButtonText}>{language === 'en' ? 'Add date' : language === 'hy' ? 'Նշել ամսաթիվը' : 'Отметить дату'}</Text>
-                  <MaterialSymbol name="arrow_forward" size={16} color={LousaPalette.berry} />
-                </PressScale>
-              </>
-            )}
-          </View>
-          <View style={[styles.moonColumn, compactWidth && styles.moonColumnCompact]}>
-            <RealisticMoon
-              size={moonSize}
-              illumination={moon.illumination}
-              phase={moon.phase}
-              showGlow={hasCycleData}
-              showBorder
-              accessibilityLabel={`${moonPhaseLabel}, ${Math.round(moon.illumination * 100)}%`}
-            />
-            <Text style={[styles.moonPhaseLabel, { color: colors.onSurfaceVariant }]} numberOfLines={2}>
-              {moonPhaseLabel}
-            </Text>
-          </View>
-        </SurfaceCard>
-
-        <SurfaceCard padding={18} tone="default" style={styles.preparationCard}>
-          <View style={styles.preparationHeader}>
-            <IconLine icon="event_available" />
-            <View style={styles.preparationCopy}>
-              <Text style={[styles.sectionEyebrow, { color: LousaPalette.berry }]}>{preparationCopy.eyebrow}</Text>
-              <Text style={[styles.preparationTitle, { color: colors.onBackground }]}>{preparationCopy.title}</Text>
-              <Text style={[styles.preparationBody, { color: colors.onSurfaceVariant }]}>{preparationCopy.body}</Text>
+        <HeroCard tone={isDark ? 'night' : 'rose'} style={styles.block}>
+          <View style={styles.cycleCard}>
+            <View style={styles.cycleCopy}>
+              {cyclePositionKnown && prediction.confidence !== 'insufficient' && mostLikelyDateText ? (
+                <>
+                  <Text style={[styles.cycleDay, { color: colors.onBackground }]}>{copy.nextCycle.replace('{date}', mostLikelyDateText)}</Text>
+                  <Text style={[styles.phase, { color: colors.onSurfaceVariant }]}>{cycle.currentDay} {copy.dayOfCycle} · {copy.phase[cycle.phase]}</Text>
+                  <Text style={[styles.forecast, { color: colors.onBackground }]}>{expectedTimingText}</Text>
+                  <StatusPill tone={prediction.confidence === 'high' ? 'success' : prediction.confidence === 'medium' ? 'rose' : 'neutral'} label={`${copy.confidence}: ${copy.confidenceValues[prediction.confidence]}`} />
+                </>
+              ) : hasCycleData ? (
+                <>
+                  <Text style={[styles.cycleDay, { color: colors.onBackground }]}>{copy.cycleNeedsUpdate}</Text>
+                  <Text style={[styles.forecast, { color: colors.onSurfaceVariant }]}>{prediction.expectedWindowPassed ? copy.forecastPassed : copy.addAnotherDate}</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.cycleDay, { color: colors.onBackground }]}>
+                    {language === 'en' ? 'Cycle not set yet' : language === 'hy' ? 'Ցիկլը դեռ կարգավորված չէ' : 'Цикл пока не настроен'}
+                  </Text>
+                  <Text style={[styles.forecast, { color: colors.onSurfaceVariant }]}>
+                    {language === 'en'
+                      ? 'Add the start date of your last period. LOUSA will build a cautious forecast.'
+                      : language === 'hy'
+                        ? 'Նշեք վերջին դաշտանի սկիզբը։ LOUSA-ն կկազմի զգուշավոր կանխատեսում։'
+                        : 'Отметьте дату начала последней менструации. LOUSA построит осторожный прогноз.'}
+                  </Text>
+                </>
+              )}
+            </View>
+            <View style={styles.moonColumn}>
+              <RealisticMoon
+                size={moonSize}
+                illumination={moon.illumination}
+                phase={moon.phase}
+                showGlow={hasCycleData}
+                showBorder
+                accessibilityLabel={`${moonPhaseLabel}, ${Math.round(moon.illumination * 100)}%`}
+              />
+              <Text style={[styles.moonPhaseLabel, { color: colors.onSurfaceVariant }]} numberOfLines={2}>{moonPhaseLabel}</Text>
             </View>
           </View>
-          <View style={styles.preparationActions}>
-            <PressScale onPress={() => preparationWindow.state === 'no_data' ? router.push('/screens/period-editor') : router.push('/(tabs)/box')} style={styles.preparationPrimary}>
-              <Text style={styles.preparationPrimaryText}>{preparationCopy.actionLabel}</Text>
-              <MaterialSymbol name="arrow_forward" size={16} color="#FFFFFF" />
-            </PressScale>
-            <PressScale onPress={() => router.push('/auth/onboarding')} style={[styles.preparationSecondary, { borderColor: colors.outlineVariant }]}>
-              <Text style={[styles.preparationSecondaryText, { color: colors.onSurfaceVariant }]}>{preparationCopy.secondaryLabel}</Text>
-            </PressScale>
+          <View style={styles.heroAction}>
+            <PrimaryButton label={cyclePrimaryLabel} icon="calendar_month" onPress={() => router.push(cyclePrimaryRoute as any)} />
           </View>
-          <View style={[styles.preparationPrivacy, { borderTopColor: colors.outlineVariant }]}>
-            <MaterialSymbol name="lock" size={15} color={colors.outline} />
-            <Text style={[styles.preparationPrivacyText, { color: colors.onSurfaceVariant }]}>{copy.prepPrivacy}</Text>
-          </View>
-        </SurfaceCard>
+        </HeroCard>
 
-        <SurfaceCard padding={18} tone="default" style={styles.checkInCard}>
+        <SectionSurface style={styles.block}>
           <View style={styles.checkInHeader}>
-            <View style={{ flex: 1 }}>
+            <View style={styles.flexOne}>
               <Text style={[styles.checkInTitle, { color: colors.onBackground }]}>{copy.how}</Text>
               <Text style={[styles.checkInBody, { color: colors.onSurfaceVariant }]}>{copy.howBody}</Text>
             </View>
@@ -286,164 +291,92 @@ export default function TodayScreen() {
             {MOODS.map((item) => {
               const selected = todayLog.mood === item.id;
               return (
-                <PressScale
+                <TextButton
                   key={item.id}
-                  accessibilityLabel={copy.moods[item.id]}
+                  label={copy.moods[item.id]}
+                  icon={item.icon}
+                  iconPlacement="left"
+                  fullWidth={false}
+                  compact
                   onPress={() => chooseMood(item.id)}
-                  style={styles.moodOption}
-                >
-                  <View style={[
-                    styles.moodCircle,
+                  style={[
+                    styles.moodButton,
                     {
-                      backgroundColor: selected ? LousaPalette.berry : (isDark ? 'rgba(255,255,255,0.07)' : '#FFFDFE'),
-                      borderColor: selected ? LousaPalette.berry : colors.outlineVariant,
+                      backgroundColor: selected ? (isDark ? 'rgba(217,133,165,0.18)' : '#F8E7ED') : 'transparent',
+                      borderColor: selected ? LousaPalette.rose : colors.outlineVariant,
                     },
-                  ]}>
-                    <MaterialSymbol name={item.icon} size={22} color={selected ? '#FFFFFF' : colors.onSurfaceVariant} />
-                  </View>
-                  {selected ? (
-                    <Text numberOfLines={2} style={[styles.moodText, { color: colors.onBackground }]}>{copy.moods[item.id]}</Text>
-                  ) : <View style={styles.moodLabelPlaceholder} />}
-                </PressScale>
+                  ]}
+                />
               );
             })}
           </View>
           {checkInMessage ? (
-            <Animated.View entering={FadeIn.duration(220).reduceMotion(ReduceMotion.System)} style={[styles.instantResponse, { borderTopColor: colors.outlineVariant }]}>
+            <Animated.View entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)} style={[styles.instantResponse, { borderTopColor: colors.outlineVariant }]}>
               <MaterialSymbol name="auto_awesome" size={17} color={LousaPalette.berry} />
               <Text style={[styles.instantText, { color: colors.onSurfaceVariant }]}>{checkInMessage}</Text>
             </Animated.View>
           ) : null}
-          <PressScale onPress={() => router.push('/screens/log-state')} style={styles.detailAction}>
-            <Text style={styles.detailText}>{copy.detail}</Text>
-            <MaterialSymbol name="arrow_forward" size={17} color={LousaPalette.berry} />
-          </PressScale>
-        </SurfaceCard>
+          <TextButton label={copy.detail} onPress={() => router.push('/screens/wellness-log')} icon="arrow_forward" />
+        </SectionSurface>
 
-        {priority.type !== 'quick_check_in' && priority.type !== 'none' ? (
-          <View style={styles.section}>
-            <Text style={[styles.sectionEyebrow, { color: LousaPalette.berry }]}>{copy.upcoming}</Text>
-            <PressScale onPress={() => priority.route && router.push(priority.route as any)}>
-              <SurfaceCard padding={17} style={styles.priorityCard}>
-                <IconLine icon={priority.type === 'delivery_today' ? 'delivery_dining' : priority.type.includes('box') || priority.type === 'feedback_required' ? 'redeem' : 'calendar_month'} />
-                <View style={styles.priorityCopy}>
-                  <Text style={[styles.priorityTitle, { color: colors.onBackground }]}>{priority.title}</Text>
-                  {priority.description ? <Text style={[styles.priorityBody, { color: colors.onSurfaceVariant }]}>{priority.description}</Text> : null}
-                </View>
-                <MaterialSymbol name="chevron_right" size={20} color={colors.outline} />
-              </SurfaceCard>
-            </PressScale>
-          </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <Text style={[styles.sectionEyebrow, { color: LousaPalette.berry }]}>{insight.category}</Text>
-          <SurfaceCard padding={19} style={styles.insightCard}>
-            <Text style={[styles.insightTitle, { color: colors.onBackground }]}>{insight.title}</Text>
-            <Text style={[styles.insightBody, { color: colors.onSurfaceVariant }]}>{insight.body}</Text>
-            <View style={styles.insightActions}>
-              <PressScale onPress={() => { engagement.submitInsightFeedback(insight.id, 'helpful'); trackProductEvent('insight_feedback_submitted', { language, response: 'helpful' }).catch(() => {}); }} style={[styles.feedbackButton, styles.feedbackPrimary]}>
-                <MaterialSymbol name="favorite" size={16} color="#FFFFFF" />
-                <Text style={styles.feedbackPrimaryText}>{copy.insightHelpful}</Text>
-              </PressScale>
-              <PressScale onPress={() => { engagement.submitInsightFeedback(insight.id, 'not_relevant'); trackProductEvent('insight_feedback_submitted', { language, response: 'not_relevant' }).catch(() => {}); }} style={[styles.feedbackButton, { borderColor: colors.outlineVariant }]}>
-                <Text style={[styles.feedbackSecondaryText, { color: colors.onSurfaceVariant }]}>{copy.insightNo}</Text>
-              </PressScale>
+        <HeroCard tone={activeOrder ? 'success' : 'neutral'} style={styles.block}>
+          <View style={styles.contextHeader}>
+            <View style={styles.contextIcon}>
+              <MaterialSymbol name={activeOrder?.status === 'out_for_delivery' ? 'delivery_dining' : activeOrder ? 'redeem' : 'event_available'} size={22} color={LousaPalette.berry} />
             </View>
-            <PressScale onPress={() => setShowSource((value) => !value)} style={styles.sourceButton}>
-              <MaterialSymbol name="info" size={15} color={colors.outline} />
-              <Text style={[styles.sourceText, { color: colors.outline }]}>{copy.source}</Text>
-            </PressScale>
-            {showSource ? <Text style={[styles.sourceNote, { color: colors.onSurfaceVariant }]}>{insight.sourceNote} {copy.disclaimer}</Text> : null}
-          </SurfaceCard>
-        </View>
-
-        {showBox && activeOrder ? (
-          <View style={styles.section}>
-            <PressScale onPress={() => activeOrder.status === 'delivered' && !hasFeedback ? router.push('/screens/box-feedback') : router.push('/(tabs)/box')}>
-              <SurfaceCard padding={18} tone="accent" style={styles.contextBox}>
-                <IconLine icon={activeOrder.status === 'out_for_delivery' ? 'delivery_dining' : 'redeem'} />
-                <View style={styles.priorityCopy}>
-                  <Text style={[styles.priorityTitle, { color: colors.onBackground }]}>{copy.boxTitle}</Text>
-                  <Text style={[styles.priorityBody, { color: colors.onSurfaceVariant }]}>{activeOrder.status === 'delivered' && !hasFeedback ? copy.boxFeedback : priority.type.includes('box') || priority.type === 'delivery_today' ? priority.description : copy.boxFeedback}</Text>
-                </View>
-                <Text style={styles.openText}>{copy.open}</Text>
-              </SurfaceCard>
-            </PressScale>
+            <View style={styles.flexOne}>
+              <Text style={[styles.contextTitle, { color: colors.onBackground }]}>{orderTitle}</Text>
+              <Text style={[styles.contextBody, { color: colors.onSurfaceVariant }]}>{orderBody}</Text>
+            </View>
           </View>
-        ) : null}
+          <View style={styles.contextAction}>
+            <PrimaryButton
+              label={activeOrder ? copy.open : preparationCopy.actionLabel}
+              icon={activeOrder ? 'redeem' : 'arrow_forward'}
+              onPress={() => router.push(activeOrder ? '/(tabs)/box' : (preparationWindow.state === 'no_data' ? '/screens/period-editor' : '/(tabs)/box'))}
+            />
+          </View>
+          {!activeOrder ? (
+            <TextButton label={preparationCopy.secondaryLabel} onPress={() => router.push('/auth/onboarding')} />
+          ) : null}
+          <View style={[styles.privacyNote, { borderTopColor: colors.outlineVariant }]}>
+            <MaterialSymbol name="lock" size={15} color={colors.outline} />
+            <Text style={[styles.privacyText, { color: colors.onSurfaceVariant }]}>{copy.prepPrivacy}</Text>
+          </View>
+        </HeroCard>
       </ScreenScroll>
     </TabbedScreen>
   );
-}
-
-function IconLine({ icon }: { icon: string }) {
-  return <View style={styles.iconLine}><MaterialSymbol name={icon} size={21} color={LousaPalette.berry} /></View>;
 }
 
 const styles = StyleSheet.create({
   content: { paddingTop: 4 },
   intro: { marginTop: 2, marginBottom: 16 },
   greeting: { fontFamily: 'sans-serif-medium', fontSize: 25, lineHeight: 31, letterSpacing: -0.2 },
-  greetingCompact: { fontSize: 20, lineHeight: 26 },
-  progressLine: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  progressText: { fontFamily: 'sans-serif-medium', fontSize: 12, lineHeight: 16 },
-  dot: { width: 3, height: 3, borderRadius: 2 },
-  cycleCard: { minHeight: 138, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 18 },
+  greetingCompact: { fontSize: 21, lineHeight: 27 },
+  progressText: { fontFamily: 'sans-serif', fontSize: 12.5, lineHeight: 18, marginTop: 5 },
+  block: { marginBottom: 18 },
+  cycleCard: { minHeight: 126, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   cycleCopy: { flex: 1, minWidth: 0 },
-  cycleDay: { fontFamily: 'sans-serif-medium', fontSize: 20, lineHeight: 26 },
+  cycleDay: { fontFamily: 'sans-serif-medium', fontSize: 21, lineHeight: 27 },
   phase: { fontFamily: 'sans-serif-medium', fontSize: 12, lineHeight: 18, marginTop: 2 },
-  forecast: { fontFamily: 'sans-serif-medium', fontSize: 13.5, lineHeight: 20, marginTop: 13 },
-  confidence: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 16, marginTop: 4 },
-  moonColumn: { width: 94, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  moonColumnCompact: { width: 82 },
-  moonPhaseLabel: { fontFamily: 'sans-serif-medium', fontSize: 10.5, lineHeight: 14, textAlign: 'center', marginTop: -4, maxWidth: 92 },
-  noDataForecast: { marginTop: 9, maxWidth: 285 },
-  noDataButton: { marginTop: 12, minHeight: 48, borderRadius: 999, borderWidth: 1, borderColor: '#E7DADF', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: '#FFFDFE' },
-  noDataButtonText: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 13 },
-  preparationCard: { marginBottom: 18 },
-  preparationHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 13 },
-  preparationCopy: { flex: 1, minWidth: 0 },
-  preparationTitle: { fontFamily: 'sans-serif-medium', fontSize: 18, lineHeight: 24, marginTop: 3 },
-  preparationBody: { fontFamily: 'sans-serif', fontSize: 13, lineHeight: 19, marginTop: 7 },
-  preparationActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
-  preparationPrimary: { minHeight: 48, borderRadius: 999, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: LousaPalette.berry },
-  preparationPrimaryText: { color: '#FFFFFF', fontFamily: 'sans-serif-medium', fontSize: 12.5 },
-  preparationSecondary: { minHeight: 48, borderRadius: 999, paddingHorizontal: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  preparationSecondaryText: { fontFamily: 'sans-serif-medium', fontSize: 12.5 },
-  preparationPrivacy: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 14, paddingTop: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  preparationPrivacyText: { flex: 1, fontFamily: 'sans-serif', fontSize: 11.5, lineHeight: 17 },
-  checkInCard: { marginBottom: 18 },
+  forecast: { fontFamily: 'sans-serif', fontSize: 13.5, lineHeight: 20, marginTop: 10, marginBottom: 10 },
+  moonColumn: { width: 82, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  moonPhaseLabel: { fontFamily: 'sans-serif-medium', fontSize: 10.5, lineHeight: 14, textAlign: 'center', marginTop: -3, maxWidth: 82 },
+  heroAction: { marginTop: 16 },
   checkInHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  checkInTitle: { fontFamily: 'sans-serif-medium', fontSize: 20, lineHeight: 26, letterSpacing: -0.1 },
-  checkInBody: { fontFamily: 'sans-serif', fontSize: 13.5, lineHeight: 20, marginTop: 5 },
-  moodsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 5, marginTop: 18 },
-  moodOption: { flex: 1, alignItems: 'center', minWidth: 0, minHeight: 78 },
-  moodCircle: { width: 50, height: 50, borderRadius: 25, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  moodText: { fontFamily: 'sans-serif-medium', fontSize: 12, lineHeight: 16, textAlign: 'center', marginTop: 7, minHeight: 24 },
-  moodLabelPlaceholder: { height: 24, marginTop: 7 },
-  instantResponse: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 13, marginTop: 12 },
-  instantText: { flex: 1, fontFamily: 'sans-serif-medium', fontSize: 12, lineHeight: 18 },
-  detailAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
-  detailText: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 13.5 },
-  section: { marginBottom: 18 },
-  sectionEyebrow: { fontFamily: 'sans-serif-medium', fontSize: 12, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 9 },
-  priorityCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconLine: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F8E7ED', alignItems: 'center', justifyContent: 'center' },
-  priorityCopy: { flex: 1, minWidth: 0 },
-  priorityTitle: { fontFamily: 'sans-serif-medium', fontSize: 15, lineHeight: 20 },
-  priorityBody: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 18, marginTop: 3 },
-  insightCard: {},
-  insightTitle: { fontFamily: 'sans-serif-medium', fontSize: 20, lineHeight: 26 },
-  insightBody: { fontFamily: 'sans-serif', fontSize: 14, lineHeight: 21, marginTop: 9 },
-  insightActions: { flexDirection: 'row', gap: 9, marginTop: 17, flexWrap: 'wrap' },
-  feedbackButton: { minHeight: 48, borderRadius: 999, paddingHorizontal: 15, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  feedbackPrimary: { backgroundColor: LousaPalette.berry, borderColor: LousaPalette.berry },
-  feedbackPrimaryText: { color: '#FFFFFF', fontFamily: 'sans-serif-medium', fontSize: 12 },
-  feedbackSecondaryText: { fontFamily: 'sans-serif-medium', fontSize: 12 },
-  sourceButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 7 },
-  sourceText: { fontFamily: 'sans-serif-medium', fontSize: 12 },
-  sourceNote: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 17, marginTop: 1 },
-  contextBox: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  openText: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 12 },
+  flexOne: { flex: 1, minWidth: 0 },
+  checkInTitle: { fontFamily: 'sans-serif-medium', fontSize: 19, lineHeight: 25 },
+  checkInBody: { fontFamily: 'sans-serif', fontSize: 13, lineHeight: 19, marginTop: 4 },
+  moodsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
+  moodButton: { borderWidth: 1, borderRadius: 16 },
+  instantResponse: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12, marginTop: 12 },
+  instantText: { flex: 1, fontFamily: 'sans-serif', fontSize: 12.5, lineHeight: 18 },
+  contextHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  contextIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: '#F8E7ED', alignItems: 'center', justifyContent: 'center' },
+  contextTitle: { fontFamily: 'sans-serif-medium', fontSize: 18, lineHeight: 24 },
+  contextBody: { fontFamily: 'sans-serif', fontSize: 13, lineHeight: 20, marginTop: 4 },
+  contextAction: { marginTop: 16 },
+  privacyNote: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12, paddingTop: 11, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  privacyText: { flex: 1, fontFamily: 'sans-serif', fontSize: 11.5, lineHeight: 17 },
 });

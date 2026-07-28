@@ -1,0 +1,5 @@
+$ npm ci --offline --ignore-scripts
+npm error code ENOTCACHED
+npm error request to https://packages.applied-caas-gateway1.internal.api.openai.org/artifactory/api/npm/npm-public/zustand/-/zustand-4.5.7.tgz failed: cache mode is 'only-if-cached' but no cached response is available.
+npm error A complete log of this run can be found in: /home/oai/.npm/_logs/2026-07-28T00_00_56_362Z-debug-0.log
+EXIT=1

@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 
-import type { DeliveryAddress, SupportedLanguage } from '../domain/models';
+import type { AddressFieldOrigin, DeliveryAddress, SupportedLanguage } from '../domain/models';
 import { normalizeBackendDeliveryZoneCheck, type DeliveryZoneTruth } from './deliveryZoneLocal';
 import { assertApiEnvironmentReady } from './apiEnvironment';
 import { secureStorage } from './security/secureStorage';
@@ -24,6 +24,7 @@ export interface GeocodedAddress {
   street: string;
   house: string;
   postalCode: string;
+  fieldOrigins?: Record<string, AddressFieldOrigin>;
   latitude: number;
   longitude: number;
 }
@@ -108,6 +109,15 @@ export async function reverseGeocodeRealCoordinate(
       street,
       house,
       postalCode: first.postalCode || '',
+      fieldOrigins: {
+        country: first.country ? 'provider_confirmed' : 'unknown',
+        region: first.region ? 'provider_confirmed' : 'unknown',
+        city: first.city || first.subregion ? 'provider_confirmed' : 'unknown',
+        district: first.district ? 'provider_confirmed' : 'unknown',
+        street: street ? 'provider_confirmed' : 'unknown',
+        house: house ? 'provider_confirmed' : 'unknown',
+        postalCode: first.postalCode ? 'provider_confirmed' : 'unknown',
+      },
       latitude,
       longitude,
     };

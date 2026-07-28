@@ -1,0 +1,123 @@
+
+> lousa-moon@1.18.15 verify:stabilization-static
+> npm run verify:version-consistency && npm run verify:openapi-route-parity && npm run verify:production-route-boundary && npm run verify:no-legacy-box-actions && npm run verify:box-quality-policy && npm run verify:route-integrity && npm run verify:touch-targets && npm run verify:ui-geometry && npm run verify:bottom-safe-area && npm run smoke:real-map && npm run smoke:real-address && npm run smoke:real-layout && npm run verify:map-moon-release && npm run verify:product-trust && npm run verify:product-trust-schema && npm run verify:mobile-only-boundary && npm run verify:android-build-reproducibility && npm run verify:complete-product-recovery && npm run verify:paper-moon-entry && npm run verify:single-stage-auth-intro
+
+
+> lousa-moon@1.18.15 verify:version-consistency
+> node scripts/verify-version-consistency.js
+
+verify:version-consistency PASS — 1.18.15 (126)
+
+> lousa-moon@1.18.15 verify:openapi-route-parity
+> node scripts/verify-openapi-route-parity.js
+
+verify:openapi-route-parity PASS — 129 method/path pairs
+
+> lousa-moon@1.18.15 verify:production-route-boundary
+> node scripts/verify-production-route-boundary.js
+
+verify:production-route-boundary PASS
+
+> lousa-moon@1.18.15 verify:no-legacy-box-actions
+> node scripts/verify-no-legacy-box-actions.js
+
+verify:no-legacy-box-actions PASS — production Box state has no local subscription/order lifecycle actions
+
+> lousa-moon@1.18.15 verify:box-quality-policy
+> node scripts/verify-box-quality-policy.js
+
+verify:box-quality-policy PASS — supplier, batch, dual-control, seal and traceability gates present
+
+> lousa-moon@1.18.15 verify:route-integrity
+> node scripts/verify-route-integrity.js
+
+verify:route-integrity PASS (28 routes)
+
+> lousa-moon@1.18.15 verify:touch-targets
+> node scripts/verify-touch-targets.js
+
+verify:touch-targets PASS
+
+> lousa-moon@1.18.15 verify:ui-geometry
+> node scripts/verify-ui-geometry.js
+
+PASS: shared screen geometry, auth flow, safe areas, scrolling, and Android keyboard guards are present.
+
+> lousa-moon@1.18.15 verify:bottom-safe-area
+> node scripts/verify-bottom-safe-area.js
+
+verify:bottom-safe-area PASS — shared tabbed scroll has bottom safe spacing.
+
+> lousa-moon@1.18.15 smoke:real-map
+> node scripts/smoke-real-map.js
+
+PASS: real MapLibre map, public style, errors, tap and draggable marker are present
+
+> lousa-moon@1.18.15 smoke:real-address
+> node scripts/smoke-real-address.js
+
+smoke:real-address PASS
+
+> lousa-moon@1.18.15 smoke:real-layout
+> node scripts/smoke-real-layout.js
+
+smoke:real-layout PASS
+
+> lousa-moon@1.18.15 verify:map-moon-release
+> node scripts/verify-map-moon-release.js
+
+PASS: real no-key OpenFreeMap style is available
+PASS: OpenFreeMap is represented as a real provider, not a placeholder
+PASS: backend zone failure is not converted into local success
+PASS: local radius is explicitly marked as an estimate
+PASS: checkout requires backend-verified zone truth
+PASS: address save requires the real backend endpoint for create/update
+PASS: map height is responsive on narrow Android devices
+PASS: map and form share one keyboard-safe scroll flow
+PASS: selected address marker is draggable on the real map
+PASS: map uses supported native load callbacks
+PASS: moon no longer uses an almost-black opaque disk
+PASS: new moon remains visually readable
+PASS: moon has a bundled vector fallback when texture loading fails
+PASS: moon shadow geometry clamps input and mirrors waxing/waning
+PASS: moon phase uses nearest standard phase point
+PASS: moon feature has a non-medical truth boundary
+PASS: home card shows the actual astronomical phase label
+LOUSA real map and readable moon verification passed.
+
+> lousa-moon@1.18.15 verify:product-trust
+> node scripts/verify-product-trust-rebuild.js
+
+verify:product-trust PASS
+
+> lousa-moon@1.18.15 verify:product-trust-schema
+> node scripts/verify-product-trust-schema.js
+
+verify:product-trust-schema PASS
+
+> lousa-moon@1.18.15 verify:mobile-only-boundary
+> node scripts/verify-mobile-only-boundary.js
+
+verify:mobile-only-boundary PASS
+Admin frontend is not present in the mobile source tree or mobile route tree.
+Server-side sync/admin API contracts may remain because the separate admin program uses the shared backend.
+
+> lousa-moon@1.18.15 verify:android-build-reproducibility
+> node scripts/verify-android-build-reproducibility.js
+
+verify:android-build-reproducibility PASS
+
+> lousa-moon@1.18.15 verify:complete-product-recovery
+> node scripts/verify-complete-product-recovery.js
+
+verify:complete-product-recovery PASS
+
+> lousa-moon@1.18.15 verify:paper-moon-entry
+> node scripts/verify-paper-moon-entry.js
+
+verify:paper-moon-entry PASS — native splash hands directly to decoded Paper Moon layers with a separate anchored thread
+
+> lousa-moon@1.18.15 verify:single-stage-auth-intro
+> node scripts/verify-single-stage-auth-intro.js
+
+verify:single-stage-auth-intro PASS — native splash → decoded Paper Moon → same auth screen, with no intermediate React screen

@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 
 import { ModalScreen, ScreenScroll } from '../../src/components/layout';
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
-import { PressScale, PrimaryAction, SurfaceCard } from '../../src/components/ui';
+import { PressScale, PrimaryButton, SurfaceCard } from '../../src/components/ui';
 import { useCycleStore, useUserStore } from '../../src/store';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { LousaPalette } from '../../src/theme/designSystem';
@@ -90,7 +90,7 @@ export default function PeriodReviewScreen() {
           </SurfaceCard>
         )}
 
-        <PrimaryAction label={copy.done} icon="check" onPress={() => { store.completeMigrationReview(); router.back(); }} />
+        <PrimaryButton label={copy.done} icon="check" onPress={() => { store.completeMigrationReview(); router.back(); }} />
       </ScreenScroll>
     </ModalScreen>
   );

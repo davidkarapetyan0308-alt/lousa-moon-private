@@ -7,7 +7,6 @@ import {
   StyleProp,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
   ViewStyle,
@@ -16,10 +15,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router';
 
 import { AmbientBackground } from './AmbientBackground';
-import { MaterialSymbol } from './MaterialSymbol';
 import { TopAppBar } from './TopAppBar';
 import { useTheme } from '../theme/ThemeProvider';
-import { LousaLayout, LousaPalette, LousaShadow } from '../theme/designSystem';
+import { LousaLayout, LousaPalette } from '../theme/designSystem';
+import { IconButton } from './ui/buttons';
 
 export function useResponsiveLayout() {
   const { width, height } = useWindowDimensions();
@@ -162,14 +161,11 @@ export function ModalScreen({
       <AmbientBackground variant={backgroundVariant || (isDark ? 'cosmic' : 'minimal')} />
       <SafeAreaView edges={['top', 'bottom']} style={styles.modalSafe}>
         <View style={[styles.modalHeader, { borderBottomColor: isDark ? LousaPalette.lineDark : LousaPalette.line }]}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Back"
+          <IconButton
+            icon={closeIcon}
+            label="Back"
             onPress={onBack || (() => router.back())}
-            style={[styles.headerIconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : '#FFFDFE' }]}
-          >
-            <MaterialSymbol name={closeIcon} size={22} color={colors.onBackground} />
-          </TouchableOpacity>
+          />
           <Text numberOfLines={2} style={[styles.modalTitle, { color: colors.onBackground }]}>{title}</Text>
           <View style={styles.headerPlaceholder} />
         </View>
@@ -210,14 +206,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerIconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...LousaShadow.soft,
   },
   headerPlaceholder: { width: 48, height: 48 },
   modalTitle: {

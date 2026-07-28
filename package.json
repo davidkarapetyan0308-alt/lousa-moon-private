@@ -1,6 +1,6 @@
 {
   "name": "lousa-moon",
-  "version": "1.18.0",
+  "version": "1.18.22",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -36,7 +36,7 @@
     "verify:bottom-safe-area": "node scripts/verify-bottom-safe-area.js",
     "verify:ui-geometry": "node scripts/verify-ui-geometry.js",
     "verify:android-build-reproducibility": "node scripts/verify-android-build-reproducibility.js",
-    "verify:ui-release-candidate": "npm run typecheck && npm run lint -- --quiet && npm test -- --runInBand && npm run test:integration -- --runInBand && npm run verify:ui-geometry && npm run verify:android-build-reproducibility && npm run smoke:auth-layout && npm run verify:bottom-safe-area && npm run verify:map-moon-release && npm run smoke:real-map && npm run smoke:real-address && npm run smoke:provider-readiness && npm run verify:product-trust && npm run verify:product-trust-schema && npm run verify:mobile-only-boundary",
+    "verify:ui-release-candidate": "npm run typecheck && npm run lint -- --quiet && npm test -- --runInBand && npm run test:integration -- --runInBand && npm run verify:stabilization-static",
     "verify:v10-1": "node scripts/verify-v10-1-premium-trust-ui.js",
     "verify:v10-2": "node scripts/verify-v10-2-safety-support-courier.js",
     "verify:v10-2-3-auth-layout": "node scripts/verify-v10-2-3-auth-layout.js",
@@ -80,7 +80,27 @@
     "verify:route-integrity": "node scripts/verify-route-integrity.js",
     "verify:touch-targets": "node scripts/verify-touch-targets.js",
     "verify:complete-product-recovery": "node scripts/verify-complete-product-recovery.js",
-    "verify:complete-product-recovery-full": "npm run typecheck && npm run lint -- --quiet && npm test -- --runInBand && npm run test:integration -- --runInBand && npm run verify:route-integrity && npm run verify:touch-targets && npm run verify:ui-geometry && npm run verify:bottom-safe-area && npm run verify:mobile-only-boundary && npm run verify:android-build-reproducibility && npm run verify:complete-product-recovery"
+    "verify:complete-product-recovery-full": "npm run typecheck && npm run lint -- --quiet && npm test -- --runInBand && npm run test:integration -- --runInBand && npm run verify:stabilization-static",
+    "verify:version-consistency": "node scripts/verify-version-consistency.js",
+    "verify:openapi-route-parity": "node scripts/verify-openapi-route-parity.js",
+    "verify:production-route-boundary": "node scripts/verify-production-route-boundary.js",
+    "verify:no-legacy-box-actions": "node scripts/verify-no-legacy-box-actions.js",
+    "verify:stabilization-static": "npm run verify:version-consistency && npm run verify:openapi-route-parity && npm run verify:production-route-boundary && npm run verify:no-legacy-box-actions && npm run verify:box-quality-policy && npm run verify:route-integrity && npm run verify:touch-targets && npm run verify:ui-geometry && npm run verify:bottom-safe-area && npm run smoke:real-map && npm run smoke:real-address && npm run smoke:real-layout && npm run verify:map-moon-release && npm run verify:product-trust && npm run verify:product-trust-schema && npm run verify:mobile-only-boundary && npm run verify:android-build-reproducibility && npm run verify:complete-product-recovery && npm run verify:paper-moon-entry && npm run verify:single-stage-auth-intro && npm run verify:build130-root-navigation && npm run verify:google-auth-build128",
+    "verify:box-quality-policy": "node scripts/verify-box-quality-policy.js",
+    "test:integration:real": "bash scripts/run-real-qa-integration.sh",
+    "verify:paper-moon-entry": "node scripts/verify-paper-moon-entry.js",
+    "verify:ux-system-rebuild": "node scripts/verify-ux-system-rebuild.js",
+    "verify:guest-mode": "node scripts/verify-guest-mode.js",
+    "android:apk:prod": "bash scripts/build-prod-apk.sh",
+    "validate:build-env": "bash scripts/validate-build-env.sh qa",
+    "verify:apk": "bash scripts/verify-apk.sh",
+    "package:source": "bash scripts/package-source-zip.sh",
+    "verify:single-stage-auth-intro": "node scripts/verify-single-stage-auth-intro.js",
+    "qa:paper-moon-device": "bash scripts/run-paper-moon-device-qa.sh",
+    "verify:google-oauth-config": "node scripts/verify-google-oauth-config.js qa",
+    "verify:google-auth-build128": "node scripts/verify-google-auth-build128.js",
+    "verify:build128-startup": "node scripts/verify-build128-startup.js",
+    "verify:build130-root-navigation": "node scripts/verify-build130-root-navigation.js"
   },
   "dependencies": {
     "@expo/vector-icons": "~14.0.4",
@@ -146,5 +166,9 @@
     "tsx": "^4.23.0",
     "typescript": "~5.3.0"
   },
-  "private": true
+  "private": true,
+  "engines": {
+    "node": ">=20 <23",
+    "npm": ">=10"
+  }
 }

@@ -3,7 +3,7 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { ModalScreen, PageIntro, ScreenScroll, useResponsiveLayout } from '../../src/components/layout';
-import { IconBubble, PressScale, PrimaryAction, SectionHeader, StatusPill, SurfaceCard } from '../../src/components/ui';
+import { IconBubble, PressScale, PrimaryButton, SectionHeader, StatusPill, SurfaceCard } from '../../src/components/ui';
 import { MoodType, SymptomType, useCycleStore, useUserStore, useWellnessStore } from '../../src/store';
 import { MOOD_ITEMS, SYMPTOM_LABELS } from '../../src/data/wellnessCatalog';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -77,7 +77,7 @@ export default function AnalyticsScreen() {
             <Image source={require('../../assets/images/states/empty-analytics.png')} style={styles.emptyImage} resizeMode="contain" />
             <Text style={[styles.emptyTitle, { color: colors.onBackground }]}>{copy.notEnough}</Text>
             <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>{copy.notEnoughText}</Text>
-            <View style={styles.emptyAction}><PrimaryAction label={copy.log} icon="edit_note" onPress={() => router.push('/screens/log-state')} /></View>
+            <View style={styles.emptyAction}><PrimaryButton label={copy.log} icon="edit_note" onPress={() => router.push('/screens/wellness-log')} /></View>
           </View>
         </ScreenScroll>
       </ModalScreen>

@@ -10,19 +10,21 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useUserStore } from "../../src/store";
 import { LousaPalette, LousaShadow } from "../../src/theme/designSystem";
-import { PressScale } from "../../src/components/ui";
+import { PressScale, PrimaryButton, SecondaryButton, TextButton } from "../../src/components/ui";
 import { useTranslation } from "../../src/utils/i18n";
 import { getAuthProviderMode, getServiceMode, services } from "../../src/services";
-import { signInWithNativeGoogle } from "../../src/services/nativeGoogleSignIn";
+import { runGoogleAuthMachine } from "../../src/features/auth/google/googleAuthMachine";
 import { PremiumAuthShell } from "../../src/features/auth/components/PremiumAuthShell";
 import { getAuthBackTarget } from "../../src/features/auth/services/authFlow";
 import { getUserFacingErrorMessage } from "../../src/services/errorMessages";
+import type { AuthSessionState } from "../../src/services/contracts";
+import { enterGuestSession, finishGuestUpgradeLocally, hasGuestCycleData, queueGuestCycleDataForNewAccount, returnToGuestSession } from "../../src/features/auth/guest/guestSession";
 
 type AuthMode =
   | "welcome"
@@ -47,7 +49,11 @@ const COPY = {
     create: "Создать профиль",
     haveAccount: "У меня уже есть аккаунт",
     continueGoogle: "Продолжить с Google",
+    googleConnecting: "Подключаем аккаунт…",
     continuePhone: "Продолжить по номеру телефона",
+    continueGuest: "Продолжить как гость",
+    returnGuest: "Вернуться в гостевой режим",
+    guestNote: "Цикл и личные заметки будут храниться только на этом устройстве. Для адреса, LOUSA BOX, оплаты и синхронизации позже понадобится аккаунт.",
     phoneTitle: "Вход по номеру",
     phoneBody: "Мы отправим одноразовый код. Для Армении используйте +374.",
     phone: "Номер телефона",
@@ -89,7 +95,7 @@ const COPY = {
     verifyBody: "Мы отправили шестизначный код на",
     verifyFirebaseBody: "Мы отправили ссылку подтверждения на",
     verifyFirebaseAction: "Я подтвердил email",
-    verificationPending: "Email пока не подтверждён. Открой письмо Firebase, нажми ссылку и вернись сюда.",
+    verificationPending: "Email пока не подтверждён. Открой письмо, нажми ссылку и вернись сюда.",
     verify: "Подтвердить",
     resend: "Отправить код повторно",
     changeEmail: "Изменить email",
@@ -136,7 +142,11 @@ const COPY = {
     create: "Create account",
     haveAccount: "I already have an account",
     continueGoogle: "Continue with Google",
+    googleConnecting: "Connecting account…",
     continuePhone: "Continue with phone number",
+    continueGuest: "Continue as guest",
+    returnGuest: "Return to guest mode",
+    guestNote: "Cycle data and personal notes will stay only on this device. An account will be required later for addresses, LOUSA BOX, payments and sync.",
     phoneTitle: "Phone sign-in",
     phoneBody: "We will send a one-time code. Armenia numbers can start with +374.",
     phone: "Phone number",
@@ -177,7 +187,7 @@ const COPY = {
     verifyBody: "We sent a six-digit code to",
     verifyFirebaseBody: "We sent a verification link to",
     verifyFirebaseAction: "I verified my email",
-    verificationPending: "Your email is not verified yet. Open the Firebase email, follow the link, then return here.",
+    verificationPending: "Your email is not verified yet. Open the verification email, follow the link, then return here.",
     verify: "Verify",
     resend: "Send code again",
     changeEmail: "Change email",
@@ -224,7 +234,11 @@ const COPY = {
     create: "Ստեղծել հաշիվ",
     haveAccount: "Ես արդեն ունեմ հաշիվ",
     continueGoogle: "Շարունակել Google-ով",
+    googleConnecting: "Միացնում ենք հաշիվը…",
     continuePhone: "Շարունակել հեռախոսահամարով",
+    continueGuest: "Շարունակել որպես հյուր",
+    returnGuest: "Վերադառնալ հյուրի ռեժիմ",
+    guestNote: "Ցիկլի տվյալներն ու անձնական գրառումները կպահվեն միայն այս սարքում։ Հասցեի, LOUSA BOX-ի, վճարման և համաժամացման համար հետո հաշիվ կպահանջվի։",
     phoneTitle: "Մուտք հեռախոսահամարով",
     phoneBody: "Մենք կուղարկենք մեկանգամյա կոդ։ Հայաստանի համար օգտագործեք +374։",
     phone: "Հեռախոսահամար",
@@ -266,7 +280,7 @@ const COPY = {
     verifyBody: "Վեցանիշ կոդն ուղարկվել է",
     verifyFirebaseBody: "Հաստատման հղումն ուղարկել ենք",
     verifyFirebaseAction: "Ես հաստատել եմ էլ․ փոստը",
-    verificationPending: "Էլ․ փոստը դեռ հաստատված չէ։ Բացեք Firebase-ի նամակը, սեղմեք հղումը և վերադարձեք այստեղ։",
+    verificationPending: "Էլ․ փոստը դեռ հաստատված չէ։ Բացեք հաստատման նամակը, սեղմեք հղումը և վերադարձեք այստեղ։",
     verify: "Հաստատել",
     resend: "Կրկին ուղարկել կոդը",
     changeEmail: "Փոխել էլ․ փոստը",
@@ -395,30 +409,17 @@ function ActionButton({
   disabled?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
 }) {
+  const semanticIcon = icon === "arrow-forward" ? "arrow_forward" : icon === "call-outline" ? "call" : undefined;
+  const Button = secondary ? SecondaryButton : PrimaryButton;
   return (
-    <PressScale
+    <Button
+      label={label === "…" ? "Продолжаем" : label}
       onPress={onPress}
       disabled={disabled}
-      style={[styles.actionButton, secondary && styles.actionButtonSecondary]}
-      accessibilityLabel={label}
-    >
-      <Text
-        numberOfLines={2}
-        style={[
-          styles.actionButtonText,
-          secondary && styles.actionButtonSecondaryText,
-        ]}
-      >
-        {label}
-      </Text>
-      {icon ? (
-        <Ionicons
-          name={icon}
-          size={19}
-          color={secondary ? LousaPalette.berry : "#FFFFFF"}
-        />
-      ) : null}
-    </PressScale>
+      loading={label === "…"}
+      icon={semanticIcon}
+      iconPlacement={semanticIcon === "call" ? "left" : "right"}
+    />
   );
 }
 
@@ -427,11 +428,13 @@ function GoogleButton({
   onPress,
   disabled,
   loading,
+  loadingLabel,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  loadingLabel?: string;
 }) {
   return (
     <PressScale
@@ -443,7 +446,7 @@ function GoogleButton({
       <View style={styles.googleMark}>
         <Text style={styles.googleMarkText}>G</Text>
       </View>
-      <Text numberOfLines={2} style={styles.googleButtonText}>{loading ? "…" : label}</Text>
+      <Text numberOfLines={2} style={styles.googleButtonText}>{loading ? (loadingLabel || label) : label}</Text>
     </PressScale>
   );
 }
@@ -469,7 +472,6 @@ function CodeInput({
         keyboardType="number-pad"
         maxLength={6}
         style={styles.hiddenCodeInput}
-        autoFocus
         textContentType="oneTimeCode"
         autoComplete="sms-otp"
         importantForAutofill="yes"
@@ -503,11 +505,17 @@ export default function LoginScreen() {
   const { language } = useTranslation();
   const copy = COPY[(language || "ru") as Language] || COPY.ru;
   const { height: screenHeight } = useWindowDimensions();
+  const params = useLocalSearchParams<{ mode?: string | string[] }>();
+  const requestedMode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const isShortScreen = screenHeight < 760;
-  const heroHeight = Math.round(Math.min(isShortScreen ? 210 : 252, Math.max(190, screenHeight * 0.28)));
+  // Keep the actual account card in the visual centre of the first screen.
+  // The welcome image is an accent, not a wall that pushes registration below the fold.
+  const heroHeight = Math.round(Math.min(isShortScreen ? 154 : 176, Math.max(140, screenHeight * 0.19)));
   const { setLanguage, setName, setOnboarded } = useUserStore();
+  const isGuestMode = useUserStore((state) => state.isGuestMode);
+  const guestAuthFlowActive = useUserStore((state) => state.guestAuthFlowActive);
 
-  const [mode, setMode] = useState<AuthMode>("welcome");
+  const [mode, setMode] = useState<AuthMode>(() => requestedMode === "signup" || requestedMode === "signin" ? requestedMode : "welcome");
   const [name, setNameInput] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("+374");
@@ -520,6 +528,62 @@ export default function LoginScreen() {
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
   const [resendSeconds, setResendSeconds] = useState(0);
   const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
+
+  const completeAuthenticatedEntry = (session: { name?: string; email?: string; phone?: string; avatarUri?: string | null; isNewUser?: boolean }, options?: { newAccount?: boolean; fallbackName?: string }) => {
+    const wasGuest = useUserStore.getState().isGuestMode;
+    const newAccount = Boolean(options?.newAccount || session.isNewUser);
+    const keepExistingGuestSetup = wasGuest;
+    useUserStore.setState({
+      name: session.name || options?.fallbackName || useUserStore.getState().name,
+      email: session.email || useUserStore.getState().email,
+      phone: session.phone || useUserStore.getState().phone,
+      avatarUri: session.avatarUri ?? useUserStore.getState().avatarUri,
+      isDemoMode: false,
+      isGuestMode: false,
+      guestAuthFlowActive: false,
+      guestStartedAt: null,
+      isOnboarded: keepExistingGuestSetup ? true : !session.isNewUser,
+    });
+    finishGuestUpgradeLocally();
+    if (wasGuest && newAccount && hasGuestCycleData()) {
+      void queueGuestCycleDataForNewAccount().catch(() => null);
+    }
+    return keepExistingGuestSetup ? "/(tabs)" : (session.isNewUser ? "/auth/onboarding" : "/(tabs)");
+  };
+
+  const handleGuestAccess = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (isGuestMode) returnToGuestSession();
+      else await enterGuestSession((language || "ru") as Language);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      router.replace("/(tabs)");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const applySessionState = (session: { sessionState?: AuthSessionState; backendSessionReady?: boolean; limitedReason?: string }) => {
+    const state: AuthSessionState = session.sessionState || (session.backendSessionReady === false ? 'local_limited_mode' : 'authenticated');
+    useUserStore.getState().setSessionState(state, session.limitedReason || null);
+    if (state === 'session_error' || state === 'session_expired' || state === 'unauthenticated') {
+      setErrors({ form: 'Не удалось безопасно завершить вход. Повторите попытку.' });
+      return false;
+    }
+    // Firebase-authenticated users may enter local limited mode while the LOUSA
+    // backend is waking up. AppShell retries server exchange without reopening Google.
+    if (state === 'local_limited_mode' || state === 'backend_session_pending') {
+      setErrors((current) => ({ ...current, oauth: '' }));
+    }
+    return true;
+  };
+
+  useEffect(() => () => {
+    if (useUserStore.getState().isGuestMode) {
+      useUserStore.setState({ guestAuthFlowActive: false });
+    }
+  }, []);
 
   useEffect(() => {
     if (!resendAvailableAt) {
@@ -538,68 +602,40 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     if (googleSubmitting) return;
     if (getServiceMode() !== "api") {
-      setErrors((current) => ({
-        ...current,
-        oauth: copy.googleServerRequired,
-      }));
+      setErrors((current) => ({ ...current, oauth: copy.googleServerRequired }));
       return;
     }
 
     setErrors((current) => ({ ...current, oauth: "" }));
     setGoogleSubmitting(true);
+    try {
+      const machine = await runGoogleAuthMachine(services.auth);
+      if (machine.state === 'CANCELLED') {
+        setErrors((current) => ({ ...current, oauth: copy.googleCancelled }));
+        return;
+      }
+      if (!machine.result?.ok) {
+        const nativeCode = machine.nativeErrorCode;
+        const message = nativeCode === 'GOOGLE_PLAY_SERVICES_UNAVAILABLE'
+          ? copy.googlePlayServicesUnavailable
+          : nativeCode === 'GOOGLE_AUTH_NOT_CONFIGURED' || nativeCode === 'GOOGLE_DEVELOPER_ERROR'
+            ? 'Google Sign-In не настроен для подписи этой APK. Проверьте package, SHA-1/SHA-256 и Web OAuth client.'
+            : nativeCode === 'GOOGLE_TOKEN_MISSING'
+              ? copy.googleTokenMissing
+              : authErrorText(machine.result, copy.googleFailed);
+        setErrors((current) => ({ ...current, oauth: message }));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        return;
+      }
 
-    const nativeResult = await signInWithNativeGoogle();
-    if (!nativeResult.ok) {
+      const result = machine.result;
+      if (!applySessionState(result.data)) return;
+      const nextRoute = completeAuthenticatedEntry(result.data, { newAccount: Boolean(result.data.isNewUser) });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      router.replace(nextRoute);
+    } finally {
       setGoogleSubmitting(false);
-      const message =
-        nativeResult.code === "GOOGLE_CANCELLED"
-          ? copy.googleCancelled
-          : nativeResult.code === "GOOGLE_PLAY_SERVICES_UNAVAILABLE"
-            ? copy.googlePlayServicesUnavailable
-            : nativeResult.code === "GOOGLE_AUTH_NOT_CONFIGURED"
-              ? getUserFacingErrorMessage({ code: "GOOGLE_AUTH_NOT_CONFIGURED", message: copy.googleFailed }, copy.googleFailed)
-              : nativeResult.code === "GOOGLE_TOKEN_MISSING"
-                ? copy.googleTokenMissing
-                : copy.googleFailed;
-      if (__DEV__ && nativeResult.technicalMessage)
-        console.warn("[Google sign-in]", nativeResult.technicalMessage);
-      setErrors((current) => ({ ...current, oauth: message }));
-      return;
     }
-
-    const result = await services.auth
-      .signInWithGoogle?.(nativeResult.idToken)
-      .catch(() => null);
-    setGoogleSubmitting(false);
-
-    if (!result?.ok) {
-      if (__DEV__ && result && !result.ok)
-        console.warn(
-          "[LOUSA Google auth]",
-          result.error.code,
-          result.error.message,
-        );
-      setErrors((current) => ({
-        ...current,
-        oauth: authErrorText(result, copy.googleFailed),
-      }));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
-        () => {},
-      );
-      return;
-    }
-
-    useUserStore.setState({
-      name: result.data.name || useUserStore.getState().name,
-      avatarUri: result.data.avatarUri ?? useUserStore.getState().avatarUri,
-      isDemoMode: false,
-      isOnboarded: !result.data.isNewUser,
-    });
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => {},
-    );
-    router.replace(result.data.isNewUser ? "/auth/onboarding" : "/(tabs)");
   };
 
   const passwordRules = useMemo(
@@ -663,13 +699,15 @@ export default function LoginScreen() {
       );
       return;
     }
+    if (!applySessionState(result.data)) return;
+    const nextRoute = completeAuthenticatedEntry(result.data);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
       () => {},
     );
-    router.replace("/(tabs)");
+    router.replace(nextRoute);
   };
 
-  const requestRegistrationCode = async (): Promise<false | "verify" | "onboarding"> => {
+  const requestRegistrationCode = async (): Promise<false | "verify" | "onboarding" | "guestUpgrade"> => {
     if (getServiceMode() !== "api" || !services.auth.register) {
       setErrors({ form: copy.googleServerRequired });
       return false;
@@ -709,15 +747,10 @@ export default function LoginScreen() {
 
     if ((result.data as any).firebaseSessionReady && (result.data as any).session) {
       const session = (result.data as any).session;
-      useUserStore.setState({
-        name: session.name || name.trim(),
-        avatarUri: session.avatarUri ?? useUserStore.getState().avatarUri,
-        isDemoMode: false,
-        isOnboarded: false,
-      });
+      const nextRoute = completeAuthenticatedEntry({ ...session, isNewUser: true }, { newAccount: true, fallbackName: name.trim() });
       setName(session.name || name.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      return "onboarding";
+      return nextRoute === "/(tabs)" ? "guestUpgrade" : "onboarding";
     }
 
     setDevOtpHint(result.data.devCode || null);
@@ -740,6 +773,10 @@ export default function LoginScreen() {
     }
 
     const registrationStep = await requestRegistrationCode();
+    if (registrationStep === "guestUpgrade") {
+      router.replace("/(tabs)");
+      return;
+    }
     if (registrationStep === "onboarding") {
       router.replace("/auth/onboarding");
       return;
@@ -791,16 +828,13 @@ export default function LoginScreen() {
       return;
     }
 
-    useUserStore.setState({
-      name: result.data.name || name.trim(),
-      isDemoMode: false,
-      isOnboarded: false,
-    });
+    if (!applySessionState(result.data)) return;
+    const nextRoute = completeAuthenticatedEntry({ ...result.data, isNewUser: true }, { newAccount: true, fallbackName: name.trim() });
     setName(result.data.name || name.trim());
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
       () => {},
     );
-    router.replace("/auth/onboarding");
+    router.replace(nextRoute);
   };
 
   const normalizePhoneInput = (value: string) => {
@@ -863,14 +897,11 @@ export default function LoginScreen() {
       return;
     }
 
-    useUserStore.setState({
-      name: result.data.name || useUserStore.getState().name || "LOUSA",
-      avatarUri: result.data.avatarUri ?? useUserStore.getState().avatarUri,
-      isDemoMode: false,
-      isOnboarded: !result.data.isNewUser,
-    });
+    if (!applySessionState(result.data)) return;
+
+    const nextRoute = completeAuthenticatedEntry({ ...result.data, name: result.data.name || useUserStore.getState().name || "LOUSA" }, { newAccount: Boolean(result.data.isNewUser) });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    router.replace(result.data.isNewUser ? "/auth/onboarding" : "/(tabs)");
+    router.replace(nextRoute);
   };
 
   const handleResendPhoneCode = async () => {
@@ -946,7 +977,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <PremiumAuthShell
+      <PremiumAuthShell
       variant={mode === "welcome" ? "welcome" : "form"}
       testID="lousa-auth-screen-frame"
       contentContainerStyle={[
@@ -1095,6 +1126,17 @@ export default function LoginScreen() {
                     secondary
                   />
                 </View>
+                <View style={styles.guestAccessBlock}>
+                  <TextButton
+                    label={isGuestMode && guestAuthFlowActive ? copy.returnGuest : copy.continueGuest}
+                    icon="visibility"
+                    iconPlacement="left"
+                    fullWidth
+                    onPress={() => { handleGuestAccess().catch(() => {}); }}
+                    loading={submitting}
+                  />
+                  <Text style={styles.guestAccessNote}>{copy.guestNote}</Text>
+                </View>
                 <View style={styles.oauthBlock}>
                   <View style={styles.oauthDividerRow}>
                     <View style={styles.oauthDivider} />
@@ -1108,6 +1150,7 @@ export default function LoginScreen() {
                     }}
                     disabled={googleSubmitting}
                     loading={googleSubmitting}
+                    loadingLabel={copy.googleConnecting}
                   />
                   <ActionButton
                     label={copy.continuePhone}
@@ -1176,6 +1219,7 @@ export default function LoginScreen() {
                     }}
                     disabled={googleSubmitting}
                     loading={googleSubmitting}
+                    loadingLabel={copy.googleConnecting}
                   />
                   <ActionButton
                     label={copy.continuePhone}
@@ -1309,6 +1353,7 @@ export default function LoginScreen() {
                     }}
                     disabled={googleSubmitting}
                     loading={googleSubmitting}
+                    loadingLabel={copy.googleConnecting}
                   />
                   <ActionButton
                     label={copy.continuePhone}
@@ -1655,7 +1700,7 @@ export default function LoginScreen() {
             ) : null}
           </View>
       </View>
-    </PremiumAuthShell>
+      </PremiumAuthShell>
   );
 }
 
@@ -1812,6 +1857,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 5,
   },
   actionStack: { gap: 10, marginTop: 22 },
+  guestAccessBlock: { marginTop: 8, alignItems: "center" },
+  guestAccessNote: { maxWidth: 430, color: "#7B6974", fontFamily: "sans-serif", fontSize: 11.5, lineHeight: 17, textAlign: "center", paddingHorizontal: 8 },
   actionStackWide: { width: "100%", gap: 11, marginTop: 8 },
   actionButton: {
     minHeight: 54,

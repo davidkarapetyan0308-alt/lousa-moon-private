@@ -18,12 +18,22 @@ export class FirebaseAdminNotConfiguredError extends Error {
 
 let cachedAuth: any | null = null;
 
-function hasAdminCredentials(env: ApiEnv) {
+export function hasFirebaseAdminCredentials(env: ApiEnv) {
   return Boolean(
     env.firebaseApplicationCredentials ||
       env.firebaseServiceAccountJson ||
       (env.firebaseProjectId && env.firebaseClientEmail && env.firebasePrivateKey),
   );
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function verifyFirebaseIdTokenViaRest(
@@ -36,13 +46,14 @@ async function verifyFirebaseIdTokenViaRest(
     );
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(env.firebaseWebApiKey)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
     },
+    8_000,
   );
   const payload = (await response.json().catch(() => null)) as any;
   const user = payload?.users?.[0];
@@ -91,24 +102,44 @@ function serviceAccountFromEnv(env: ApiEnv) {
   };
 }
 
+function getFirebaseAuth(env: ApiEnv) {
+  if (cachedAuth) return cachedAuth;
+  if (!hasFirebaseAdminCredentials(env)) {
+    throw new FirebaseAdminNotConfiguredError('Firebase Admin credentials are missing.');
+  }
+  const existing = getApps()[0];
+  const credential = env.firebaseApplicationCredentials
+    ? applicationDefault()
+    : cert(serviceAccountFromEnv(env) as any);
+  const app = existing || initializeApp({ credential, projectId: env.firebaseProjectId || undefined });
+  cachedAuth = getAuth(app);
+  return cachedAuth;
+}
+
+export async function checkFirebaseVerifierReady(env: ApiEnv) {
+  if (hasFirebaseAdminCredentials(env)) {
+    getFirebaseAuth(env);
+    return { mode: 'admin' as const, projectId: env.firebaseProjectId };
+  }
+  if (env.allowFirebaseRestFallback && env.firebaseWebApiKey && env.firebaseProjectId) {
+    return { mode: 'rest' as const, projectId: env.firebaseProjectId };
+  }
+  throw new FirebaseAdminNotConfiguredError('Firebase Admin credentials are required for this environment.');
+}
+
 export async function verifyFirebaseIdToken(env: ApiEnv, idToken: string): Promise<FirebaseDecodedToken> {
   if (!idToken) throw new FirebaseAdminNotConfiguredError('Firebase ID token is required.');
-  if (!hasAdminCredentials(env)) {
-    return verifyFirebaseIdTokenViaRest(env, idToken);
+  if (!hasFirebaseAdminCredentials(env)) {
+    if (env.allowFirebaseRestFallback) return verifyFirebaseIdTokenViaRest(env, idToken);
+    throw new FirebaseAdminNotConfiguredError('Firebase Admin credentials are required.');
   }
   try {
-    if (!cachedAuth) {
-      const existing = getApps()[0];
-      const credential = env.firebaseApplicationCredentials
-        ? applicationDefault()
-        : cert(serviceAccountFromEnv(env) as any);
-      const app = existing || initializeApp({ credential, projectId: env.firebaseProjectId || undefined });
-      cachedAuth = getAuth(app);
-    }
-    return cachedAuth.verifyIdToken(idToken, true) as Promise<FirebaseDecodedToken>;
+    // Signature/audience/expiry validation. Revocation checks are intentionally
+    // omitted from the login hot path to avoid an additional network lookup.
+    return getFirebaseAuth(env).verifyIdToken(idToken, false) as Promise<FirebaseDecodedToken>;
   } catch (error) {
-    if (env.firebaseWebApiKey && env.firebaseProjectId) {
-      console.warn('[firebase-auth] Firebase Admin verification failed; retrying via Firebase REST fallback.', error);
+    if (env.allowFirebaseRestFallback && env.firebaseWebApiKey && env.firebaseProjectId) {
+      console.warn('[firebase-auth] Admin verification failed; using explicitly enabled REST fallback.');
       return verifyFirebaseIdTokenViaRest(env, idToken);
     }
     throw error;

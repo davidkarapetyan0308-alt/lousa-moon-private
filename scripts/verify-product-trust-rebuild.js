@@ -25,7 +25,7 @@ requireText('apps/api/src/server.ts', "pathname === '/v1/admin/delivery-map'");
 requireText('app/(tabs)/cycle.tsx', 'factVsForecast');
 requireText('src/store/index.ts', 'applyCycleDayObservation');
 requireText('src/store/index.ts', 'undoLastCycleEdit');
-requireText('src/services/cycleSync.ts', 'lousa-private-cycle-sync-queue-v1');
+requireText('src/services/cycleSync.ts', 'lousa-cycle-sync-v2');
 requireText('app/(tabs)/cycle.tsx', 'flushCycleSyncQueue');
 requireText('app/screens/address-map.tsx', 'loadDeliveryAddressDraft<DeliveryAddress>');
 requireText('src/services/maps.ts', "method: updateExisting ? 'PATCH' : 'POST'");

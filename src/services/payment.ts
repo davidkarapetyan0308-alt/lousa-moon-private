@@ -2,10 +2,13 @@ export type PaymentIntentStatus =
   | 'created'
   | 'requires_action'
   | 'processing'
+  | 'authorized'
   | 'succeeded'
   | 'failed'
   | 'cancelled'
-  | 'refunded';
+  | 'refunded'
+  | 'partially_refunded'
+  | 'disputed';
 
 export interface PaymentMethod {
   id: string;

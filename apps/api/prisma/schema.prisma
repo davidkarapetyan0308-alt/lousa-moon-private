@@ -246,6 +246,7 @@ model DeliveryAddress {
   formattedAddress  String
   provider          String
   providerPlaceId   String?
+  fieldOrigins      Json     @default("{}")
   deliveryZoneId    String?
   deliveryFeeMinor  Int?
   estimatedMinutes  Int?
@@ -652,8 +653,19 @@ model Order {
   supportTickets    SupportTicket[]
   boxPackingRecord  BoxPackingRecord?
   productComplaints ProductComplaint[]
+  feedback          OrderFeedback?
   @@index([userId, status])
   @@index([status, updatedAt])
+}
+
+
+model OrderFeedback {
+  id        String   @id @default(uuid())
+  orderId   String   @unique
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model OrderItem {
@@ -697,6 +709,11 @@ model PaymentEvent {
   providerEventId   String   @unique
   type              String
   data              Json?
+  payloadHash       String?
+  signatureVerified Boolean  @default(false)
+  receivedAt        DateTime @default(now())
+  processedAt       DateTime?
+  processingError   String?
   createdAt         DateTime @default(now())
   order             Order    @relation(fields: [orderId], references: [id])
   paymentIntent     PaymentIntent? @relation(fields: [paymentIntentId], references: [id])

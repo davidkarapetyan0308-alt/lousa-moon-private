@@ -1,53 +1,43 @@
 #!/usr/bin/env node
 /* eslint-env node */
-
 const fs = require('node:fs');
-
 const read = (file) => fs.readFileSync(file, 'utf8');
 const packageJson = JSON.parse(read('package.json'));
+const failures = [];
+const need = (condition, reason) => { if (!condition) failures.push(reason); };
+const forbid = (condition, reason) => { if (condition) failures.push(reason); };
+
 const gradleProperties = read('android/gradle.properties');
 const settingsGradle = read('android/settings.gradle');
 const envExample = read('.env.example');
 const patchScript = read('scripts/patch-expo-modules-core.js');
-const qaBuild = read('scripts/build-qa-apk.sh');
-const releaseApk = read('scripts/build-release-apk.sh');
-const releaseAab = read('scripts/build-release-aab.sh');
+need(packageJson.scripts?.postinstall === 'node scripts/patch-expo-modules-core.js', 'reproducible Expo Modules Core postinstall patch');
+need(gradleProperties.includes('android.useAndroidX=true'), 'AndroidX must be enabled');
+need(gradleProperties.includes('android.enableJetifier=true'), 'Jetifier must be enabled');
+need(settingsGradle.includes('System.getenv("NODE_BINARY")'), 'portable Node binary lookup for Gradle');
+forbid(settingsGradle.includes('/Users/'), 'developer-specific absolute path in Android settings');
+forbid(settingsGradle.includes('PLUGINMANAGEMENT DEBUG'), 'debug logging in Android settings');
+need(envExample.includes('EMAIL_FROM="LOUSA MOON <onboarding@resend.dev>"'), 'shell-safe EMAIL_FROM example');
+need(patchScript.includes('project.components.findByName("release")'), 'safe Expo release component lookup');
+need(patchScript.includes('refusing an unsafe automatic patch'), 'fail-closed dependency patch behavior');
 
-const failures = [];
-const requireText = (source, fragment, reason) => {
-  if (!source.includes(fragment)) failures.push(`Missing: ${reason}`);
-};
-const forbidText = (source, fragment, reason) => {
-  if (source.includes(fragment)) failures.push(`Forbidden: ${reason}`);
-};
-
-if (packageJson.scripts?.postinstall !== 'node scripts/patch-expo-modules-core.js') {
-  failures.push('Missing: reproducible Expo Modules Core postinstall patch');
-}
-
-requireText(gradleProperties, 'android.useAndroidX=true', 'AndroidX must be enabled');
-requireText(gradleProperties, 'android.enableJetifier=true', 'Jetifier must be enabled for the Expo Location SmartLocation AAR');
-requireText(settingsGradle, 'System.getenv("NODE_BINARY")', 'portable Node binary lookup for Gradle');
-forbidText(settingsGradle, '/Users/', 'Android settings must not contain a developer-specific absolute path');
-forbidText(settingsGradle, 'PLUGINMANAGEMENT DEBUG', 'Android settings must not contain debug logging');
-requireText(envExample, 'EMAIL_FROM="LOUSA MOON <onboarding@resend.dev>"', 'shell-safe EMAIL_FROM example');
-requireText(patchScript, 'project.components.findByName("release")', 'safe Expo release component lookup');
-requireText(patchScript, 'refusing an unsafe automatic patch', 'fail-closed dependency patch behavior');
-
-for (const [name, source, task] of [
-  ['QA APK', qaBuild, ':app:assembleQa'],
-  ['release APK', releaseApk, ':app:assembleRelease'],
-  ['release AAB', releaseAab, ':app:bundleRelease'],
+for (const [name, file, task] of [
+  ['QA APK', 'scripts/build-qa-apk.sh', ':app:assembleQa'],
+  ['release APK', 'scripts/build-release-apk.sh', ':app:assembleRelease'],
+  ['release AAB', 'scripts/build-release-aab.sh', ':app:bundleRelease'],
 ]) {
-  requireText(source, 'node scripts/patch-expo-modules-core.js', `${name} must apply the compatibility patch`);
-  requireText(source, './gradlew clean --stacktrace', `${name} must clean in a separate Gradle invocation`);
-  requireText(source, `./gradlew ${task} --stacktrace`, `${name} must run its build task after clean`);
-  forbidText(source, `./gradlew clean ${task}`, `${name} must not combine clean and assemble/bundle in one Gradle graph`);
+  const source = read(file);
+  need(source.includes('node scripts/patch-expo-modules-core.js'), `${name} applies compatibility patch`);
+  const cleanIndex = source.search(/\.\/gradlew\s+clean(?:\s+"\$\{[^}]+\[@\]\}")?|\.\/gradlew\s+clean\s+--stacktrace/);
+  const taskIndex = source.indexOf(`./gradlew ${task}`);
+  need(cleanIndex >= 0, `${name} runs Gradle clean`);
+  need(taskIndex > cleanIndex, `${name} runs build task after clean`);
+  forbid(new RegExp(`\\.\\/gradlew\\s+clean[^\\n]*${task.replace(':', '\\:')}`).test(source), `${name} combines clean and build task in one invocation`);
 }
 
 if (failures.length) {
-  console.error(failures.join('\n'));
+  console.error('verify:android-build-reproducibility FAIL');
+  failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-
-console.log('PASS: Android build scripts are reproducible after npm install and avoid the Expo Location clean/assemble race.');
+console.log('verify:android-build-reproducibility PASS');

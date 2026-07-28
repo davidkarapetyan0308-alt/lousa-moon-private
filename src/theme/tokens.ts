@@ -137,3 +137,30 @@ export const Themes: Record<ThemeName, { label: string; colors: typeof light }> 
   lavender_dream: { label: 'Light', colors: light },
   midnight_moon: { label: 'Dark', colors: dark },
 };
+
+const THEME_NAMES = new Set<ThemeName>(Object.keys(Themes) as ThemeName[]);
+const LEGACY_THEME_ALIASES: Record<string, ThemeName> = {
+  light: 'rose_gold',
+  default: 'rose_gold',
+  rose: 'rose_gold',
+  roseGold: 'rose_gold',
+  pearl: 'pearl_white',
+  silver: 'moon_silver',
+  lavender: 'lavender_dream',
+  dark: 'midnight_moon',
+  midnight: 'midnight_moon',
+};
+
+export function isThemeName(value: unknown): value is ThemeName {
+  return typeof value === 'string' && THEME_NAMES.has(value as ThemeName);
+}
+
+/**
+ * Persisted builds before 1.18.x used several legacy theme identifiers. Never let
+ * one malformed/old value crash ThemeProvider during application bootstrap.
+ */
+export function normalizeThemeName(value: unknown): ThemeName {
+  if (isThemeName(value)) return value;
+  if (typeof value === 'string' && LEGACY_THEME_ALIASES[value]) return LEGACY_THEME_ALIASES[value];
+  return 'rose_gold';
+}

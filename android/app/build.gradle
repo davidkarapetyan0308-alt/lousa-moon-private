@@ -113,6 +113,15 @@ if (hasReleaseKeystore) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+def qaKeystorePath = System.getenv('LOUSA_QA_KEYSTORE_PATH') ?: System.getenv('ANDROID_DEBUG_KEYSTORE') ?: "${System.properties['user.home']}/.android/debug.keystore"
+def qaKeystoreAlias = System.getenv('LOUSA_QA_KEY_ALIAS') ?: 'androiddebugkey'
+def qaKeystorePassword = System.getenv('LOUSA_QA_KEYSTORE_PASSWORD') ?: 'android'
+def qaKeyPassword = System.getenv('LOUSA_QA_KEY_PASSWORD') ?: qaKeystorePassword
+def hasQaKeystore = file(qaKeystorePath).exists()
+def qaTaskRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('qa') }
+if (qaTaskRequested && !hasQaKeystore) {
+    throw new GradleException('LOUSA QA build requires LOUSA_QA_KEYSTORE_PATH (or an existing ~/.android/debug.keystore). Its SHA-1/SHA-256 must be registered for com.lousa.moon.qa in Firebase.')
+}
 
 if (!hasReleaseKeystore && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') || it.toLowerCase().contains('bundle') }) {
     throw new GradleException('LOUSA release build requires android/keystore.properties and a private upload keystore. Use assembleDebug for local testing.')
@@ -129,14 +138,21 @@ android {
         applicationId 'com.lousa.moon'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 114
-        versionName "1.18.3"
+        versionCode 133
+        versionName "1.18.22"
         manifestPlaceholders = [googleMapsApiKey: googleMapsApiKey]
     }
     signingConfigs {
-        // Keep Android's standard debug keystore (~/.android/debug.keystore).
-        // QA is signed with this exact key, whose SHA-1/SHA-256 must be registered
-        // for com.lousa.moon.qa in Firebase Console.
+        // QA uses one explicit, stable signing key. The key itself stays outside
+        // the source ZIP; its SHA-1/SHA-256 must be registered for com.lousa.moon.qa.
+        if (hasQaKeystore) {
+            qa {
+                storeFile file(qaKeystorePath)
+                storePassword qaKeystorePassword
+                keyAlias qaKeystoreAlias
+                keyPassword qaKeyPassword
+            }
+        }
         if (hasReleaseKeystore) {
             release {
                 storeFile file(keystoreProperties['storeFile'])
@@ -165,7 +181,7 @@ android {
             initWith release
             applicationIdSuffix ".qa"
             versionNameSuffix "-qa"
-            signingConfig signingConfigs.debug
+            signingConfig = hasQaKeystore ? signingConfigs.qa : signingConfigs.debug
             debuggable false
             matchingFallbacks = ['release']
             minifyEnabled false

@@ -13,7 +13,7 @@ import { ScreenScroll, TabbedScreen, useResponsiveLayout } from '../../src/compo
 import {
   IconBubble,
   PressScale,
-  PrimaryAction,
+  PrimaryButton,
   SectionHeader,
   StatusPill,
   SurfaceCard,
@@ -122,7 +122,7 @@ export default function WellnessScreen() {
               <StatusPill tone={cycle.isCyclePositionKnown ? "rose" : "neutral"} label={cycle.isCyclePositionKnown ? `${copy.today} · ${cycle.currentDay}` : copy.cycleUncertain} />
             </View>
             <Text style={[styles.heroTitle, { color: colors.onBackground }]} numberOfLines={4}>{tip}</Text>
-            <PressScale onPress={() => router.push('/screens/log-state' as any)} style={styles.heroAction}>
+            <PressScale onPress={() => router.push('/screens/wellness-log' as any)} style={styles.heroAction}>
               <Text style={styles.heroActionText}>{copy.edit}</Text>
               <MaterialSymbol name="arrow_forward" size={18} color="#FFFFFF" />
             </PressScale>
@@ -130,18 +130,18 @@ export default function WellnessScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(220).delay(55).reduceMotion(ReduceMotion.System)} style={styles.metricsRow}>
-          <MiniMetric style={compactWidth ? styles.metricHalf : undefined} icon="bolt" label={copy.energy} value={`${todayLog.energy}/5`} tone="rose" onPress={() => router.push('/screens/log-state' as any)} />
+          <MiniMetric style={compactWidth ? styles.metricHalf : undefined} icon="bolt" label={copy.energy} value={`${todayLog.energy}/5`} tone="rose" onPress={() => router.push('/screens/wellness-log' as any)} />
           <MiniMetric style={compactWidth ? styles.metricHalf : undefined} icon="water_drop" label={copy.water} value={`${todayLog.water} ${copy.glasses}`} tone="lavender" onPress={() => wellness.addWater(toLocalDateString())} />
-          <MiniMetric style={compactWidth ? styles.metricWide : undefined} icon="bedtime" label={copy.sleep} value={`${todayLog.sleep} ${copy.hours}`} tone="neutral" onPress={() => router.push('/screens/log-state' as any)} />
+          <MiniMetric style={compactWidth ? styles.metricWide : undefined} icon="bedtime" label={copy.sleep} value={`${todayLog.sleep} ${copy.hours}`} tone="neutral" onPress={() => router.push('/screens/wellness-log' as any)} />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(220).delay(85).reduceMotion(ReduceMotion.System)} style={styles.section}>
-          <SectionHeader title={copy.plan} actionLabel={copy.edit} onAction={() => router.push('/screens/log-state' as any)} />
+          <SectionHeader title={copy.plan} actionLabel={copy.edit} onAction={() => router.push('/screens/wellness-log' as any)} />
           <SurfaceCard padding={4}>
             {tasks.map((task, index) => (
               <PressScale
                 key={task.label}
-                onPress={() => router.push('/screens/log-state' as any)}
+                onPress={() => router.push('/screens/wellness-log' as any)}
                 style={[
                   styles.taskRow,
                   index > 0 && { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : LousaPalette.line, borderTopWidth: 1 },
@@ -204,7 +204,7 @@ export default function WellnessScreen() {
                 <Text style={[styles.assistantText, { color: colors.onSurfaceVariant }]}>{copy.assistantText}</Text>
               </View>
             </View>
-            <PrimaryAction label={copy.ask} icon="chat" onPress={() => router.push('/screens/help-assistant')} />
+            <PrimaryButton label={copy.ask} icon="chat" onPress={() => router.push('/screens/help-assistant')} />
           </SurfaceCard>
         </Animated.View>
 

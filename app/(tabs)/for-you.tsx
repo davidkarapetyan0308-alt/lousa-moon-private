@@ -1,10 +1,18 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
 import { ScreenScroll, TabbedScreen, useResponsiveLayout } from '../../src/components/layout';
-import { PressScale, StatusPill, SurfaceCard } from '../../src/components/ui';
+import {
+  HeroCard,
+  ListRow,
+  ListSection,
+  PrimaryButton,
+  SectionSurface,
+  StatusPill,
+  TextButton,
+} from '../../src/components/ui';
 import { useBoxStore, useCycleStore, useUserStore, useWellnessStore } from '../../src/store';
 import { calculateCyclePrediction } from '../../src/services/cyclePrediction';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -69,21 +77,29 @@ const COPY = {
   },
 } as const;
 
+
 export default function ForYouScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { compactWidth } = useResponsiveLayout();
   const language = useUserStore((state) => state.language);
   const copy = COPY[language];
   const cycle = useCycleStore();
   const wellness = useWellnessStore();
   const box = useBoxStore();
-  const confirmed = useMemo(() => cycle.periodRecords.filter((item) => item.confirmed && !item.deletedAt && !item.needsReview), [cycle.periodRecords]);
+  const [showWhy, setShowWhy] = useState(false);
+
+  const confirmed = useMemo(
+    () => cycle.periodRecords.filter((item) => item.confirmed && !item.deletedAt && !item.needsReview),
+    [cycle.periodRecords],
+  );
   const prediction = useMemo(() => calculateCyclePrediction(cycle.periodRecords, {
     fallbackCycleLength: cycle.avgCycleLength,
     fallbackPeriodLength: cycle.avgPeriodLength,
     cycleContext: cycle.onboardingProfile.cycleContext,
     factors: cycle.onboardingProfile.factors,
-    negativeBleedingDates: cycle.cycleObservations.filter((item) => item.type === 'no_bleeding' && !item.deletedAt).map((item) => item.date),
+    negativeBleedingDates: cycle.cycleObservations
+      .filter((item) => item.type === 'no_bleeding' && !item.deletedAt)
+      .map((item) => item.date),
   }), [cycle.periodRecords, cycle.avgCycleLength, cycle.avgPeriodLength, cycle.onboardingProfile.cycleContext, cycle.onboardingProfile.factors, cycle.cycleObservations]);
   const hasCycle = confirmed.length > 0;
   const cycleData = useMemo(() => getCycleData(
@@ -105,64 +121,101 @@ export default function ForYouScreen() {
         ? copy.basedFew
         : copy.basedEnough;
   const confidenceLabel = copy[prediction.confidence];
+  const firstMaterial = copy.materialsList[0];
+
+  const primaryLabel = cyclePositionKnown
+    ? copy.calendar
+    : language === 'en'
+      ? 'Add a confirmed date'
+      : language === 'hy'
+        ? 'Ավելացնել հաստատված ամսաթիվ'
+        : 'Добавить подтверждённую дату';
 
   return (
-    <TabbedScreen title={copy.appBar} backgroundVariant={isDark ? 'cosmic' : 'minimal'}>
+    <TabbedScreen title={copy.appBar} backgroundVariant="minimal">
       <ScreenScroll tabbed contentContainerStyle={styles.content}>
         <Text style={[styles.heroTitle, compactWidth && styles.heroTitleCompact, { color: colors.onBackground }]}>{copy.title}</Text>
         <Text style={[styles.heroSubtitle, { color: colors.onSurfaceVariant }]}>{copy.subtitle}</Text>
 
-        <SurfaceCard padding={20} tone="accent" style={styles.cardGap}>
+        <HeroCard tone="rose" style={styles.block}>
           <Text style={styles.eyebrow}>{copy.today}</Text>
           {cyclePositionKnown ? (
             <>
               <Text style={[styles.todayTitle, { color: colors.onBackground }]}>{cycleData.currentDay} {copy.cycleDay}</Text>
-              <View style={styles.pills}>
-                <StatusPill tone={prediction.confidence === 'high' ? 'success' : prediction.confidence === 'medium' ? 'rose' : 'neutral'} label={`${copy.confidence}: ${confidenceLabel}`} />
-                <StatusPill tone="neutral" label={`${confirmed.length} ${language === 'en' ? 'confirmed starts' : language === 'hy' ? 'հաստատված սկիզբ' : 'подтверждённых начал'}`} />
-              </View>
               {prediction.expectedWindowPassed ? (
-                <View style={styles.forecastBlock}>
-                  <Text style={[styles.forecastLabel, { color: colors.onSurfaceVariant }]}>{copy.forecast}</Text>
-                  <Text style={[styles.forecastValue, { color: colors.onBackground }]}>{copy.forecastPassed}</Text>
-                </View>
+                <Text style={[styles.body, { color: colors.onSurfaceVariant }]}>{copy.forecastPassed}</Text>
               ) : prediction.earliestStart && prediction.latestStart ? (
                 <View style={styles.forecastBlock}>
                   <Text style={[styles.forecastLabel, { color: colors.onSurfaceVariant }]}>{copy.forecast}</Text>
                   <Text style={[styles.forecastValue, { color: colors.onBackground }]}>{formatHumanDate(prediction.earliestStart, language)}–{formatHumanDate(prediction.latestStart, language)}</Text>
                 </View>
               ) : null}
+              <View style={styles.pills}>
+                <StatusPill tone={prediction.confidence === 'high' ? 'success' : prediction.confidence === 'medium' ? 'rose' : 'neutral'} label={`${copy.confidence}: ${confidenceLabel}`} />
+                <StatusPill tone="neutral" label={`${confirmed.length} ${language === 'en' ? 'confirmed starts' : language === 'hy' ? 'հաստատված սկիզբ' : 'подтверждённых начал'}`} />
+              </View>
             </>
           ) : hasCycle ? (
             <>
               <Text style={[styles.todayTitle, { color: colors.onBackground }]}>{copy.cycleUncertain}</Text>
               <Text style={[styles.body, { color: colors.onSurfaceVariant }]}>{copy.forecastPassed}</Text>
-              <ActionButton icon="edit_calendar" label={copy.calendar} onPress={() => router.push('/(tabs)/cycle')} />
             </>
           ) : (
             <>
               <Text style={[styles.todayTitle, { color: colors.onBackground }]}>{copy.noCycle}</Text>
               <Text style={[styles.body, { color: colors.onSurfaceVariant }]}>{copy.noCycleBody}</Text>
-              <ActionButton icon="calendar_month" label={copy.calendar} onPress={() => router.push('/(tabs)/cycle')} />
             </>
           )}
-        </SurfaceCard>
+          <View style={styles.primaryAction}>
+            <PrimaryButton label={primaryLabel} icon="calendar_month" onPress={() => router.push('/(tabs)/cycle')} />
+          </View>
+          <TextButton
+            label={showWhy ? (language === 'en' ? 'Hide explanation' : language === 'hy' ? 'Թաքցնել բացատրությունը' : 'Скрыть объяснение') : copy.why}
+            icon={showWhy ? 'expand_less' : 'info'}
+            iconPlacement="left"
+            onPress={() => setShowWhy((value) => !value)}
+          />
+          {showWhy ? (
+            <View style={[styles.whyBox, { borderTopColor: colors.outlineVariant }]}>
+              <Text style={[styles.whyText, { color: colors.onSurfaceVariant }]}>{whyText}</Text>
+              <Text style={[styles.whyText, { color: colors.onSurfaceVariant }]}>{copy.possibleBody}</Text>
+            </View>
+          ) : null}
+        </HeroCard>
 
-        <InfoCard icon="help_center" title={copy.why} body={whyText} />
-        <InfoCard icon="self_improvement" title={copy.possible} body={copy.possibleBody} />
+        <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>{copy.actions}</Text>
+        <ListSection style={styles.block}>
+          <ListRow
+            icon="favorite"
+            title={copy.mood}
+            detail={`${logCount} ${language === 'en' ? 'entries saved' : language === 'hy' ? 'գրառում' : 'записей'}`}
+            onPress={() => router.push('/(tabs)/wellness')}
+          />
+          <ListRow
+            icon="edit_calendar"
+            title={copy.calendar}
+            detail={language === 'en' ? 'Edit, delete or undo a record' : language === 'hy' ? 'Փոխել, ջնջել կամ վերադարձնել գրառումը' : 'Изменить, удалить или вернуть запись'}
+            onPress={() => router.push('/(tabs)/cycle')}
+          />
+          <ListRow
+            icon="notifications"
+            title={copy.reminder}
+            detail={language === 'en' ? 'Private notifications' : language === 'hy' ? 'Անձնական հիշեցումներ' : 'Приватные уведомления'}
+            onPress={() => router.push('/screens/notifications')}
+          />
+          <ListRow
+            icon={firstMaterial[0]}
+            title={firstMaterial[1]}
+            detail={firstMaterial[2]}
+            onPress={() => router.push(firstMaterial[3] as any)}
+            divider={false}
+          />
+        </ListSection>
 
-        <SectionTitle title={copy.actions} />
-        <View style={styles.actionGrid}>
-          <ActionTile icon="favorite" label={copy.mood} note={`${logCount} ${language === 'en' ? 'entries saved' : language === 'hy' ? 'գրառում' : 'записей'}`} onPress={() => router.push('/(tabs)/wellness')} />
-          <ActionTile icon="edit_calendar" label={copy.calendar} note={language === 'en' ? 'Edit and undo records' : language === 'hy' ? 'Փոխել կամ ջնջել գրառումը' : 'Изменить или удалить запись'} onPress={() => router.push('/(tabs)/cycle')} />
-          <ActionTile icon="notifications" label={copy.reminder} note={language === 'en' ? 'Private notifications' : language === 'hy' ? 'Անձնական հիշեցումներ' : 'Приватные уведомления'} onPress={() => router.push('/screens/notifications')} />
-          <ActionTile icon="monitoring" label={copy.patterns} note={language === 'en' ? 'Only your own data' : language === 'hy' ? 'Միայն ձեր տվյալները' : 'Только ваши данные'} onPress={() => router.push('/screens/analytics')} />
-        </View>
-
-        <SectionTitle title={copy.box} />
-        <SurfaceCard padding={19} style={styles.cardGap}>
+        <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>{copy.box}</Text>
+        <SectionSurface style={styles.block}>
           <View style={styles.boxHeader}>
-            <View style={styles.iconCircle}><MaterialSymbol name="redeem" size={22} color={LousaPalette.berry} /></View>
+            <View style={styles.boxIcon}><MaterialSymbol name="redeem" size={22} color={LousaPalette.berry} /></View>
             <View style={styles.flexOne}>
               <Text style={[styles.cardTitle, { color: colors.onBackground }]}>{hasCycle ? copy.boxReady : copy.boxPending}</Text>
               <Text style={[styles.body, { color: colors.onSurfaceVariant }]}>{hasCycle ? copy.boxReadyBody : copy.boxPendingBody}</Text>
@@ -172,23 +225,10 @@ export default function ForYouScreen() {
             <StatusPill tone="success" icon="local_shipping" label={language === 'en' ? 'Delivery included' : language === 'hy' ? 'Առաքումը ներառված է' : 'Доставка включена'} />
             {box.planId ? <StatusPill tone="neutral" label={String(box.planId).toUpperCase()} /> : null}
           </View>
-        </SurfaceCard>
+          <TextButton label={language === 'en' ? 'Open LOUSA Box' : language === 'hy' ? 'Բացել LOUSA Box-ը' : 'Открыть LOUSA Box'} icon="arrow_forward" onPress={() => router.push('/(tabs)/box')} />
+        </SectionSurface>
 
-        <SectionTitle title={copy.materials} />
-        <View style={[styles.materialList, { borderColor: colors.outlineVariant }]}>
-          {copy.materialsList.map(([icon, title, body, route], index) => (
-            <PressScale key={title} onPress={() => router.push(route as any)} style={[styles.materialRow, index > 0 && { borderTopColor: colors.outlineVariant, borderTopWidth: StyleSheet.hairlineWidth }]}>
-              <View style={styles.materialIcon}><MaterialSymbol name={icon} size={20} color={LousaPalette.berry} /></View>
-              <View style={styles.flexOne}>
-                <Text style={[styles.materialTitle, { color: colors.onBackground }]}>{title}</Text>
-                <Text style={[styles.materialBody, { color: colors.onSurfaceVariant }]}>{body}</Text>
-              </View>
-              <MaterialSymbol name="chevron_right" size={20} color={colors.outline} />
-            </PressScale>
-          ))}
-        </View>
-
-        <View style={[styles.disclaimer, { borderColor: colors.outlineVariant }]}>
+        <View style={[styles.disclaimer, { borderTopColor: colors.outlineVariant }]}>
           <MaterialSymbol name="health_and_safety" size={18} color={colors.onSurfaceVariant} />
           <Text style={[styles.disclaimerText, { color: colors.onSurfaceVariant }]}>{copy.disclaimer}</Text>
         </View>
@@ -197,76 +237,27 @@ export default function ForYouScreen() {
   );
 }
 
-function SectionTitle({ title }: { title: string }) {
-  const { colors } = useTheme();
-  return <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>{title}</Text>;
-}
-
-function InfoCard({ icon, title, body }: { icon: string; title: string; body: string }) {
-  const { colors } = useTheme();
-  return (
-    <SurfaceCard padding={18} style={styles.cardGap}>
-      <View style={styles.infoRow}>
-        <View style={styles.iconCircle}><MaterialSymbol name={icon} size={21} color={LousaPalette.berry} /></View>
-        <View style={styles.flexOne}>
-          <Text style={[styles.cardTitle, { color: colors.onBackground }]}>{title}</Text>
-          <Text style={[styles.body, { color: colors.onSurfaceVariant }]}>{body}</Text>
-        </View>
-      </View>
-    </SurfaceCard>
-  );
-}
-
-function ActionButton({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
-  return (
-    <PressScale onPress={onPress} style={styles.inlineAction}>
-      <MaterialSymbol name={icon} size={18} color="#FFFFFF" />
-      <Text style={styles.inlineActionText}>{label}</Text>
-    </PressScale>
-  );
-}
-
-function ActionTile({ icon, label, note, onPress }: { icon: string; label: string; note: string; onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <PressScale onPress={onPress} style={[styles.actionTile, { borderColor: colors.outlineVariant, backgroundColor: colors.surface }]}>
-      <View style={styles.iconCircle}><MaterialSymbol name={icon} size={20} color={LousaPalette.berry} /></View>
-      <Text style={[styles.actionTitle, { color: colors.onBackground }]}>{label}</Text>
-      <Text style={[styles.actionNote, { color: colors.onSurfaceVariant }]}>{note}</Text>
-    </PressScale>
-  );
-}
-
 const styles = StyleSheet.create({
   content: { paddingTop: 6 },
-  heroTitle: { fontFamily: 'sans-serif-medium', fontSize: 31, lineHeight: 38, letterSpacing: -0.3 },
-  heroTitleCompact: { fontSize: 28, lineHeight: 34 },
+  heroTitle: { fontFamily: 'sans-serif-medium', fontSize: 29, lineHeight: 35, letterSpacing: -0.3 },
+  heroTitleCompact: { fontSize: 26, lineHeight: 32 },
   heroSubtitle: { fontFamily: 'sans-serif', fontSize: 14, lineHeight: 21, marginTop: 6, marginBottom: 18, maxWidth: 520 },
-  eyebrow: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 12, letterSpacing: 1.5, textTransform: 'uppercase' },
+  block: { marginBottom: 18 },
+  eyebrow: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 12, letterSpacing: 1.2, textTransform: 'uppercase' },
   todayTitle: { fontFamily: 'sans-serif-medium', fontSize: 24, lineHeight: 30, marginTop: 7 },
-  cardGap: { marginBottom: 13 },
-  body: { fontFamily: 'sans-serif', fontSize: 13, lineHeight: 20, marginTop: 6 },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 13 },
+  body: { fontFamily: 'sans-serif', fontSize: 13.5, lineHeight: 20, marginTop: 6 },
   forecastBlock: { marginTop: 15, paddingTop: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E7DDE1' },
   forecastLabel: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 17 },
   forecastValue: { fontFamily: 'sans-serif-medium', fontSize: 15, lineHeight: 21, marginTop: 2 },
-  sectionTitle: { fontFamily: 'sans-serif-medium', fontSize: 21, lineHeight: 27, marginTop: 11, marginBottom: 10 },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 13 },
+  primaryAction: { marginTop: 18 },
+  whyBox: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 4, paddingTop: 12, gap: 8 },
+  whyText: { fontFamily: 'sans-serif', fontSize: 12.5, lineHeight: 18 },
+  sectionTitle: { fontFamily: 'sans-serif-medium', fontSize: 20, lineHeight: 26, marginBottom: 10 },
   boxHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  iconCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F8E7ED', alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontFamily: 'sans-serif-medium', fontSize: 16, lineHeight: 21 },
+  boxIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#F8E7ED', alignItems: 'center', justifyContent: 'center' },
   flexOne: { flex: 1, minWidth: 0 },
-  inlineAction: { alignSelf: 'flex-start', minHeight: 48, borderRadius: 23, backgroundColor: LousaPalette.berry, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
-  inlineActionText: { color: '#FFFFFF', fontFamily: 'sans-serif-medium', fontSize: 13 },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
-  actionTile: { width: '48%', minHeight: 132, borderRadius: 24, borderWidth: 1, padding: 15 },
-  actionTitle: { fontFamily: 'sans-serif-medium', fontSize: 14, lineHeight: 19, marginTop: 11 },
-  actionNote: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 17, marginTop: 4 },
-  materialList: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 16 },
-  materialRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
-  materialIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F8E7ED', alignItems: 'center', justifyContent: 'center' },
-  materialTitle: { fontFamily: 'sans-serif-medium', fontSize: 14, lineHeight: 19 },
-  materialBody: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  disclaimer: { minHeight: 58, borderWidth: 1, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, marginBottom: 6 },
+  cardTitle: { fontFamily: 'sans-serif-medium', fontSize: 16, lineHeight: 21 },
+  disclaimer: { minHeight: 58, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, marginBottom: 6 },
   disclaimerText: { flex: 1, fontFamily: 'sans-serif', fontSize: 12, lineHeight: 17 },
 });

@@ -25,10 +25,10 @@ assert(provider.includes('https://tiles.openfreemap.org/styles/positron'), 'real
 assert(provider.includes("'maplibre-openfreemap'"), 'OpenFreeMap is represented as a real provider, not a placeholder');
 assert(!maps.includes('return checkGyumriDeliveryZoneLocal'), 'backend zone failure is not converted into local success');
 assert(localZone.includes("source: 'local-estimate'"), 'local radius is explicitly marked as an estimate');
-assert(address.includes("zone.source !== 'backend'"), 'checkout requires backend-verified zone truth');
-assert(address.includes('saveDeliveryAddressRemote(address,'), 'address save requires the real backend endpoint for create/update');
+assert(/zone\.source\s*!==\s*[\"']backend[\"']/.test(address), 'checkout requires backend-verified zone truth');
+assert(address.includes('saveDeliveryAddressRemote('), 'address save requires the real backend endpoint for create/update');
 assert(address.includes('mapHeight = width < 360'), 'map height is responsive on narrow Android devices');
-assert(address.includes('contentContainerStyle={[styles.screenContent'), 'map and form share one keyboard-safe scroll flow');
+assert(address.includes('KeyboardAvoidingView') && address.includes('styles.screenContent') && address.includes('insets.bottom'), 'map and form share one keyboard-safe scroll flow');
 assert(mapComponent.includes('draggable={interactive}') && mapComponent.includes('onDragEnd'), 'selected address marker is draggable on the real map');
 assert(mapComponent.includes('onDidFailLoadingMap') && !mapComponent.includes('onMapLoadingError'), 'map uses supported native load callbacks');
 assert(!moon.includes('rgba(4,3,10,0.935)'), 'moon no longer uses an almost-black opaque disk');

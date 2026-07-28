@@ -1,59 +1,20 @@
-# LOUSA Moon 1.18.0 — example only. Never commit real secrets.
+# LOUSA MOON 1.18.22 / versionCode 133
+# Safe distributable Android build example. Localhost and private LAN URLs are forbidden.
 
-# Mobile runtime
 EXPO_PUBLIC_APP_MODE=api
 EXPO_PUBLIC_AUTH_PROVIDER=firebase
 EXPO_PUBLIC_BUILD_CHANNEL=qa
 EXPO_PUBLIC_RELEASE_BUILD=false
-EXPO_PUBLIC_LOUSA_API_URL=http://192.168.1.100:4100
-PUBLIC_API_URL=http://192.168.1.100:4100
-
-# URLs required by the mobile product contract
+EXPO_PUBLIC_LOUSA_API_URL=https://lousa-moon-api.onrender.com
+PUBLIC_API_URL=https://lousa-moon-api.onrender.com
+FIREBASE_PROJECT_ID=lousa-moon
+GOOGLE_SERVICES_JSON_PATH=./google-services.json
+EXPO_PUBLIC_FIREBASE_AUTH_ACTION_URL=
 EXPO_PUBLIC_LOUSA_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/positron
-EXPO_PUBLIC_ROUTE_FALLBACK_URL=
-EXPO_PUBLIC_LOUSA_EVENTS_URL=
 EXPO_PUBLIC_OPENFREEMAP_STYLE_URL=https://tiles.openfreemap.org/styles/positron
 EXPO_PUBLIC_DISABLE_PUBLIC_MAP_FALLBACK=false
-
-# Firebase mobile
-EXPO_PUBLIC_FIREBASE_AUTH_ACTION_URL=https://auth.example.com/lousa
-GOOGLE_SERVICES_JSON_PATH=
-
-# Backend
-API_HOST=0.0.0.0
-PORT=4100
-APP_ENV=development
-DATABASE_URL=postgresql://lousa:lousa@localhost:5432/lousa_moon?schema=public
-REDIS_URL=
-JWT_ACCESS_SECRET=CHANGE_ME
-JWT_REFRESH_SECRET=CHANGE_ME
-FIREBASE_PROJECT_ID=lousa-moon
-FIREBASE_SERVICE_ACCOUNT_JSON=
-FIREBASE_CLIENT_EMAIL=
-FIREBASE_PRIVATE_KEY=
-GOOGLE_APPLICATION_CREDENTIALS=
-
-# Maps/geocoding — server keys only
-MAPTILER_API_KEY=
-GOOGLE_MAPS_SERVER_API_KEY=
-GOOGLE_MAPS_ANDROID_API_KEY=
+EXPO_PUBLIC_ROUTE_FALLBACK_URL=
+EXPO_PUBLIC_LOUSA_EVENTS_URL=
 EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY=
+GOOGLE_MAPS_ANDROID_API_KEY=
 EXPO_PUBLIC_MAPTILER_API_KEY=
-
-# Messaging
-EMAIL_PROVIDER=console
-EMAIL_FROM="LOUSA MOON <onboarding@example.com>"
-ALLOW_DEV_OTP_RESPONSE=false
-RESEND_API_KEY=
-SMTP_HOST=
-SMTP_USER=
-SMTP_PASS=
-SMS_PROVIDER=console
-
-# Payments. Production must not use sandbox.
-PAYMENT_PROVIDER=sandbox
-PAYMENT_WEBHOOK_SECRET=
-
-# Delivery truth
-DELIVERY_ZONE_BASE_FEE_MINOR=0
-DELIVERY_ZONE_RADIUS_KM=15

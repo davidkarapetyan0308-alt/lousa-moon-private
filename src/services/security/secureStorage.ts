@@ -1,5 +1,6 @@
 const PREFIX = 'lousa-secure-';
-const SECURE_TIMEOUT_MS = 900;
+const SECURE_READ_TIMEOUT_MS = 5_000;
+const SECURE_WRITE_TIMEOUT_MS = 8_000;
 const VALID_KEY = /^[A-Za-z0-9._-]+$/;
 const memoryFallback = new Map<string, string>();
 
@@ -15,7 +16,6 @@ let secureStoreModule: ExpoSecureStoreModule | null | undefined;
 function getSecureStore(): ExpoSecureStoreModule | null {
   if (secureStoreModule !== undefined) return secureStoreModule;
   try {
-    // Lazy-load SecureStore so native-module issues can never block app startup.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     secureStoreModule = require('expo-secure-store') as ExpoSecureStoreModule;
   } catch {
@@ -30,26 +30,32 @@ function safeKey(key: string) {
   return VALID_KEY.test(sanitized) ? sanitized : `${PREFIX}fallback`;
 }
 
-function withTimeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
-  return new Promise((resolve) => {
+export class SecureStorageError extends Error {
+  constructor(public code: 'SECURE_STORAGE_TIMEOUT' | 'SECURE_STORAGE_WRITE_FAILED', message: string) {
+    super(message);
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+  return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
-        resolve(fallback);
+        reject(new SecureStorageError('SECURE_STORAGE_TIMEOUT', `${operation} exceeded ${timeoutMs}ms`));
       }
-    }, SECURE_TIMEOUT_MS);
+    }, timeoutMs);
     promise.then((value) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
         resolve(value);
       }
-    }).catch(() => {
+    }).catch((error) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        resolve(fallback);
+        reject(error instanceof Error ? error : new SecureStorageError('SECURE_STORAGE_WRITE_FAILED', `${operation} failed`));
       }
     });
   });
@@ -67,30 +73,39 @@ export const secureStorage: SecureStorage = {
     const k = safeKey(key);
     const store = getSecureStore();
     if (!store) return memoryFallback.get(k) ?? null;
-    const value = await withTimeout(store.getItemAsync(k), null);
-    return value ?? memoryFallback.get(k) ?? null;
+    const value = await withTimeout(store.getItemAsync(k), SECURE_READ_TIMEOUT_MS, `SecureStore.get(${k})`);
+    if (value != null) memoryFallback.set(k, value);
+    return value;
   },
   async set(key, value) {
     const k = safeKey(key);
-    memoryFallback.set(k, value);
     const store = getSecureStore();
-    if (!store) return;
+    if (!store) {
+      memoryFallback.set(k, value);
+      return;
+    }
     await withTimeout(
       store.setItemAsync(k, value, {
         keychainAccessible: store.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-      }).then(() => true),
-      false,
+      }),
+      SECURE_WRITE_TIMEOUT_MS,
+      `SecureStore.set(${k})`,
     );
+    // Update the in-memory read-through cache only after durable native success.
+    memoryFallback.set(k, value);
   },
   async remove(key) {
     const k = safeKey(key);
-    memoryFallback.delete(k);
     const store = getSecureStore();
-    if (!store) return;
-    await withTimeout(store.deleteItemAsync(k).then(() => true), false);
+    if (store) {
+      await withTimeout(store.deleteItemAsync(k), SECURE_WRITE_TIMEOUT_MS, `SecureStore.remove(${k})`);
+    }
+    memoryFallback.delete(k);
   },
   async clear(keys) {
-    await Promise.all(keys.map((key) => this.remove(key)));
+    const results = await Promise.allSettled(keys.map((key) => this.remove(key)));
+    const rejected = results.find((result) => result.status === 'rejected');
+    if (rejected?.status === 'rejected') throw rejected.reason;
   },
 };
 

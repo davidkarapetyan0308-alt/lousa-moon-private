@@ -40,8 +40,10 @@ export const LousaLayout = {
   fieldGap: 16,
   labelGap: 8,
   cardRadius: 20,
+  heroRadius: 24,
   smallRadius: 16,
-  buttonHeight: 54,
+  buttonRadius: 18,
+  buttonHeight: 56,
   inputHeight: 54,
   touchTarget: 48,
   headerHeight: 60,
@@ -51,6 +53,17 @@ export const LousaLayout = {
   tabBarHeightIos: 72,
   tabBarBottomGap: 7,
   tabContentGap: 28,
+} as const;
+
+export const LousaTypography = {
+  display: { fontFamily: 'sans-serif-medium', fontSize: 30, lineHeight: 36 },
+  screenTitle: { fontFamily: 'sans-serif-medium', fontSize: 26, lineHeight: 32 },
+  sectionTitle: { fontFamily: 'sans-serif-medium', fontSize: 20, lineHeight: 26 },
+  cardTitle: { fontFamily: 'sans-serif-medium', fontSize: 17, lineHeight: 23 },
+  body: { fontFamily: 'sans-serif', fontSize: 16, lineHeight: 24 },
+  secondary: { fontFamily: 'sans-serif', fontSize: 14, lineHeight: 20 },
+  caption: { fontFamily: 'sans-serif', fontSize: 12, lineHeight: 16 },
+  button: { fontFamily: 'sans-serif-medium', fontSize: 15, lineHeight: 20 },
 } as const;
 
 export const LousaShadow = {

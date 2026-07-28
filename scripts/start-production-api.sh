@@ -1,17 +1,32 @@
 #!/usr/bin/env sh
 set -eu
 
-if [ "${SKIP_MIGRATIONS_ON_START:-false}" = "true" ]; then
-  echo "[LOUSA] Skipping database migrations on web startup because SKIP_MIGRATIONS_ON_START=true."
+APP_ENV_VALUE="${APP_ENV:-production}"
+RUN_MIGRATIONS_VALUE="${RUN_MIGRATIONS_ON_START:-true}"
+SKIP_MIGRATIONS_VALUE="${SKIP_MIGRATIONS_ON_START:-false}"
+
+if [ "$SKIP_MIGRATIONS_VALUE" = "true" ] || [ "$RUN_MIGRATIONS_VALUE" != "true" ]; then
+  echo "[LOUSA] Database migrations disabled for startup."
 else
-  node ./scripts/ensure-auth-db-schema.js
   echo "[LOUSA] Applying database migrations..."
   if [ -n "${MIGRATION_DATABASE_URL:-}" ]; then
-    DATABASE_URL="$MIGRATION_DATABASE_URL" npm run prisma:migrate:deploy || echo "[LOUSA] Prisma migrations failed; continuing with auth schema fallback."
+    if ! DATABASE_URL="$MIGRATION_DATABASE_URL" npm run prisma:migrate:deploy; then
+      echo "[LOUSA] Prisma migrations failed with MIGRATION_DATABASE_URL." >&2
+      [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
+    fi
   else
-    npm run prisma:migrate:deploy || echo "[LOUSA] Prisma migrations failed; continuing with auth schema fallback."
+    if ! npm run prisma:migrate:deploy; then
+      echo "[LOUSA] Prisma migrations failed with DATABASE_URL." >&2
+      [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
+    fi
   fi
-  node ./scripts/ensure-auth-db-schema.js
+fi
+
+# Auth schema fallback is idempotent and protects older QA databases, but any
+# failure is fatal outside local development so /ready cannot lie about startup.
+if ! node ./scripts/ensure-auth-db-schema.js; then
+  echo "[LOUSA] Auth schema validation/fallback failed." >&2
+  [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
 fi
 
 echo "[LOUSA] Starting public API on port ${PORT:-8080}..."

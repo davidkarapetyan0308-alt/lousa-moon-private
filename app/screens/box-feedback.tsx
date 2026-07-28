@@ -4,10 +4,12 @@ import { router } from 'expo-router';
 
 import { ModalScreen, ScreenScroll } from '../../src/components/layout';
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
-import { PressScale, PrimaryAction, SectionHeader, SurfaceCard } from '../../src/components/ui';
+import { PressScale, PrimaryButton, SectionHeader, SurfaceCard } from '../../src/components/ui';
 import { useBoxStore, useUserStore } from '../../src/store';
+import { services } from '../../src/services';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { LousaPalette } from '../../src/theme/designSystem';
+import { GuestAccountGate } from '../../src/features/auth/components/GuestAccountGate';
 
 const COPY = {
   ru: { title: 'Отзыв о боксе', intro: 'Твои ответы изменят количество и состав следующего бокса.', enough: 'Средств хватило?', yes: 'Да', no: 'Нет', liked: 'Что понравилось?', remove: 'Что убрать в следующий раз?', allergy: 'Была аллергическая реакция?', packaging: 'Упаковка', delivery: 'Доставка', note: 'Комментарий', placeholder: 'Что стоит изменить?', save: 'Сохранить отзыв', saved: 'Отзыв сохранён' },
@@ -16,6 +18,14 @@ const COPY = {
 } as const;
 
 export default function BoxFeedbackScreen() {
+  const language = useUserStore((state) => state.language);
+  const isGuestMode = useUserStore((state) => state.isGuestMode);
+  const copy = COPY[language] || COPY.ru;
+  if (isGuestMode) return <GuestAccountGate screenTitle={copy.title} />;
+  return <AuthenticatedBoxFeedbackScreen />;
+}
+
+function AuthenticatedBoxFeedbackScreen() {
   const { colors, isDark } = useTheme();
   const language = useUserStore((state) => state.language);
   const copy = COPY[language];
@@ -29,12 +39,14 @@ export default function BoxFeedbackScreen() {
   const [packaging, setPackaging] = useState(existing?.packagingRating ?? 0);
   const [delivery, setDelivery] = useState(existing?.deliveryRating ?? 0);
   const [note, setNote] = useState(existing?.note ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const toggle = (list: string[], value: string, setList: (next: string[]) => void) => setList(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
 
-  const save = () => {
-    if (!order) return router.back();
-    box.addFeedback({
+  const save = async () => {
+    if (!order || saving) return;
+    const feedback = {
       orderId: order.id,
       enoughItems: enough,
       tooFewCategories: enough === false ? ['menstrual'] : [],
@@ -45,7 +57,17 @@ export default function BoxFeedbackScreen() {
       packagingRating: packaging || null,
       deliveryRating: delivery || null,
       note: note.trim(),
-    });
+      createdAt: new Date().toISOString(),
+    };
+    setSaving(true);
+    setError('');
+    const result = await services.orders.saveFeedback(feedback).catch(() => null);
+    setSaving(false);
+    if (!result?.ok) {
+      setError(result && !result.ok ? result.error.message : 'Не удалось сохранить отзыв. Данные остались на экране.');
+      return;
+    }
+    box.addFeedback(feedback);
     router.back();
   };
 
@@ -81,7 +103,8 @@ export default function BoxFeedbackScreen() {
       <SectionHeader title={copy.note} />
       <SurfaceCard padding={16}><TextInput value={note} onChangeText={setNote} placeholder={copy.placeholder} placeholderTextColor={colors.outline} multiline style={[styles.input, { color: colors.onSurface, borderColor: colors.outlineVariant, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FCF8FA' }]} /></SurfaceCard>
 
-      <View style={styles.save}><PrimaryAction label={copy.save} icon="check" onPress={save} /></View>
+      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      <View style={styles.save}><PrimaryButton label={copy.save} icon="check" onPress={() => void save()} loading={saving} /></View>
     </ScreenScroll>
   </ModalScreen>;
 }
@@ -96,5 +119,6 @@ const styles = StyleSheet.create({
   rowChoices: { flexDirection: 'row', gap: 10 }, choice: { flex: 1, minHeight: 48, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, choiceText: { fontFamily: 'sans-serif-medium', fontSize: 13 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { minHeight: 48, borderRadius: 999, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12 }, chipText: { maxWidth: 220, fontFamily: 'sans-serif-medium', fontSize: 12 },
   rating: { flexDirection: 'row', justifyContent: 'space-around' }, star: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+  error: { color: '#B94F62', fontFamily: 'sans-serif-medium', fontSize: 13, lineHeight: 19, marginTop: 12 },
   input: { minHeight: 120, borderWidth: 1, borderRadius: 18, padding: 14, fontFamily: 'sans-serif', fontSize: 14, textAlignVertical: 'top' }, save: { marginTop: 24 },
 });

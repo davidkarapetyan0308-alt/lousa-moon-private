@@ -1,0 +1,145 @@
+===== npm run verify:version-consistency =====
+
+> lousa-moon@1.18.22 verify:version-consistency
+> node scripts/verify-version-consistency.js
+
+verify:version-consistency PASS — 1.18.22 (133)
+RESULT=PASS
+
+===== npm run verify:openapi-route-parity =====
+
+> lousa-moon@1.18.22 verify:openapi-route-parity
+> node scripts/verify-openapi-route-parity.js
+
+verify:openapi-route-parity PASS — 131 method/path pairs
+RESULT=PASS
+
+===== npm run verify:production-route-boundary =====
+
+> lousa-moon@1.18.22 verify:production-route-boundary
+> node scripts/verify-production-route-boundary.js
+
+verify:production-route-boundary PASS
+RESULT=PASS
+
+===== npm run verify:no-legacy-box-actions =====
+
+> lousa-moon@1.18.22 verify:no-legacy-box-actions
+> node scripts/verify-no-legacy-box-actions.js
+
+verify:no-legacy-box-actions PASS — production Box state has no local subscription/order lifecycle actions
+RESULT=PASS
+
+===== npm run verify:box-quality-policy =====
+
+> lousa-moon@1.18.22 verify:box-quality-policy
+> node scripts/verify-box-quality-policy.js
+
+verify:box-quality-policy PASS — supplier, batch, dual-control, seal and traceability gates present
+RESULT=PASS
+
+===== npm run verify:route-integrity =====
+
+> lousa-moon@1.18.22 verify:route-integrity
+> node scripts/verify-route-integrity.js
+
+verify:route-integrity PASS (31 routes)
+RESULT=PASS
+
+===== npm run verify:touch-targets =====
+
+> lousa-moon@1.18.22 verify:touch-targets
+> node scripts/verify-touch-targets.js
+
+verify:touch-targets PASS
+RESULT=PASS
+
+===== npm run verify:ui-geometry =====
+
+> lousa-moon@1.18.22 verify:ui-geometry
+> node scripts/verify-ui-geometry.js
+
+PASS: shared screen geometry, auth flow, safe areas, scrolling, and Android keyboard guards are present.
+RESULT=PASS
+
+===== npm run verify:bottom-safe-area =====
+
+> lousa-moon@1.18.22 verify:bottom-safe-area
+> node scripts/verify-bottom-safe-area.js
+
+verify:bottom-safe-area PASS — shared tabbed scroll has bottom safe spacing.
+RESULT=PASS
+
+===== npm run verify:ui-copy =====
+
+> lousa-moon@1.18.22 verify:ui-copy
+> node scripts/verify-ui-copy.js
+
+verify:ui-copy PASS — premium copy blacklist is clean.
+RESULT=PASS
+
+===== npm run verify:no-fake-cycle-ui =====
+
+> lousa-moon@1.18.22 verify:no-fake-cycle-ui
+> node scripts/verify-no-fake-cycle-ui.js
+
+verify:no-fake-cycle-ui PASS — no-data state is explicit and fake cycle layers are blocked.
+RESULT=PASS
+
+===== npm run verify:complete-product-recovery =====
+
+> lousa-moon@1.18.22 verify:complete-product-recovery
+> node scripts/verify-complete-product-recovery.js
+
+verify:complete-product-recovery PASS
+RESULT=PASS
+
+===== npm run verify:paper-moon-entry =====
+
+> lousa-moon@1.18.22 verify:paper-moon-entry
+> node scripts/verify-paper-moon-entry.js
+
+verify:paper-moon-entry PASS — global Paper Moon starts from the root Stack frame and degrades through a calm fallback
+RESULT=PASS
+
+===== npm run verify:single-stage-auth-intro =====
+
+> lousa-moon@1.18.22 verify:single-stage-auth-intro
+> node scripts/verify-single-stage-auth-intro.js
+
+verify:single-stage-auth-intro PASS — native splash → global Paper Moon → committed destination, with no intermediate React screen
+RESULT=PASS
+
+===== npm run verify:build130-root-navigation =====
+
+> lousa-moon@1.18.22 verify:build130-root-navigation
+> node scripts/verify-build130-root-navigation.js
+
+BUILD131 ROOT NAVIGATION VERIFY: PASS
+RESULT=PASS
+
+===== npm run verify:google-auth-build128 =====
+
+> lousa-moon@1.18.22 verify:google-auth-build128
+> node scripts/verify-google-auth-build128.js
+
+verify:google-auth-build128 PASS — staged Google/Firebase/backend session contract
+RESULT=PASS
+
+===== npm run verify:ux-system-rebuild =====
+
+> lousa-moon@1.18.22 verify:ux-system-rebuild
+> node scripts/verify-ux-system-rebuild.js
+
+verify:ux-system-rebuild PASS — semantic buttons, reduced key screens, state-driven surfaces, sticky form actions
+RESULT=PASS
+
+===== npm run verify:guest-mode =====
+
+> lousa-moon@1.18.22 verify:guest-mode
+> node scripts/verify-guest-mode.js
+
+verify:guest-mode PASS
+RESULT=PASS
+
+PASS=18 FAIL=0

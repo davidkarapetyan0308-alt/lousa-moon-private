@@ -33,6 +33,7 @@ import type { PaymentIntent, PaymentMethod, Refund } from '../payment';
 import { getUserFacingErrorMessage } from '../errorMessages';
 import { assertApiEnvironmentReady } from '../apiEnvironment';
 import { AUTH_TOKEN_KEYS, secureStorage } from '../security/secureStorage';
+import { getStoredAuthSessionState, setStoredAuthSessionState } from '../../features/auth/session/sessionState';
 
 
 interface ApiErrorEnvelope {
@@ -46,8 +47,29 @@ function friendlyApiMessage(code: string, fallback: string) {
   return getUserFacingErrorMessage({ code, message: fallback }, fallback);
 }
 
+const PUBLIC_AUTH_PATHS = ['/v1/auth/register', '/v1/auth/verify-email', '/v1/auth/login', '/v1/auth/google', '/v1/auth/phone/start', '/v1/auth/phone/verify', '/v1/auth/password/forgot', '/v1/auth/password/reset', '/v1/auth/firebase/session', '/v1/auth/refresh'];
+
+function isPublicAuthPath(path: string) {
+  return PUBLIC_AUTH_PATHS.some((entry) => path === entry);
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<ServiceResult<T>> {
   try {
+    const sessionState = await getStoredAuthSessionState();
+    if (sessionState === 'guest' && !isPublicAuthPath(path)) {
+      return fail({
+        code: 'GUEST_ACCOUNT_REQUIRED',
+        message: 'Для синхронизации, адреса, оплаты и LOUSA BOX нужен аккаунт. Локальные данные гостя остаются на устройстве.',
+        recoverable: false,
+      });
+    }
+    if ((sessionState === 'local_limited_mode' || sessionState === 'backend_session_pending') && !isPublicAuthPath(path)) {
+      return fail({
+        code: 'BACKEND_SESSION_PENDING',
+        message: 'Вход подтверждён, но серверная сессия ещё не создана. Повторите подключение к сервису.',
+        recoverable: true,
+      });
+    }
     const apiUrl = assertApiEnvironmentReady();
     const token = await secureStorage.get('accessToken');
     const headers = new Headers(init.headers || {});
@@ -97,12 +119,15 @@ export const apiAuthService: AuthService = {
     await secureStorage.set('accessToken', result.data.accessToken);
     await secureStorage.set('refreshToken', result.data.refreshToken);
     await secureStorage.set('sessionId', result.data.user.id);
+    await setStoredAuthSessionState('authenticated');
     return ok({
       userId: result.data.user.id,
       sessionId: result.data.user.id,
       accessToken: result.data.accessToken,
       refreshToken: result.data.refreshToken,
       demo: Boolean(result.data.demo),
+      sessionState: 'authenticated',
+      backendSessionReady: true,
     });
   },
   async signIn(email, password) {
@@ -114,6 +139,7 @@ export const apiAuthService: AuthService = {
     await secureStorage.set('accessToken', result.data.accessToken);
     await secureStorage.set('refreshToken', result.data.refreshToken);
     await secureStorage.set('sessionId', result.data.user.id);
+    await setStoredAuthSessionState('authenticated');
     return ok({
       userId: result.data.user.id,
       sessionId: result.data.user.id,
@@ -124,6 +150,8 @@ export const apiAuthService: AuthService = {
       phone: result.data.user.phone,
       name: result.data.user.name,
       avatarUri: result.data.user.avatarUri ?? null,
+      sessionState: 'authenticated',
+      backendSessionReady: true,
     });
   },
   async signInWithGoogle(idToken) {
@@ -141,6 +169,7 @@ export const apiAuthService: AuthService = {
     await secureStorage.set('accessToken', result.data.accessToken);
     await secureStorage.set('refreshToken', result.data.refreshToken);
     await secureStorage.set('sessionId', result.data.user.id);
+    await setStoredAuthSessionState('authenticated');
     return ok({
       userId: result.data.user.id,
       sessionId: result.data.user.id,
@@ -174,6 +203,7 @@ export const apiAuthService: AuthService = {
     await secureStorage.set('accessToken', result.data.accessToken);
     await secureStorage.set('refreshToken', result.data.refreshToken);
     await secureStorage.set('sessionId', result.data.user.id);
+    await setStoredAuthSessionState('authenticated');
     return ok({
       userId: result.data.user.id,
       sessionId: result.data.user.id,
@@ -210,12 +240,15 @@ export const apiAuthService: AuthService = {
     await secureStorage.set('accessToken', result.data.accessToken);
     await secureStorage.set('refreshToken', result.data.refreshToken);
     await secureStorage.set('sessionId', result.data.user.id);
+    await setStoredAuthSessionState('authenticated');
     return ok({
       userId: result.data.user.id,
       sessionId: result.data.user.id,
       accessToken: result.data.accessToken,
       refreshToken: result.data.refreshToken,
       demo: Boolean(result.data.demo),
+      sessionState: 'authenticated',
+      backendSessionReady: true,
     });
   },
   async requestPasswordReset(email, language) {
@@ -417,6 +450,9 @@ export const apiSupportService: SupportService = {
   },
   sendMessage(ticketId: string, message: string) {
     return request<SupportTicket>(`/v1/support/tickets/${encodeURIComponent(ticketId)}/messages`, { method: 'POST', body: JSON.stringify({ message }) });
+  },
+  closeTicket(ticketId: string) {
+    return request<SupportTicket>(`/v1/support/tickets/${encodeURIComponent(ticketId)}/close`, { method: 'POST' });
   },
   getCourierContact(orderId: string) {
     return request<CourierContact>(`/v1/app/orders/${encodeURIComponent(orderId)}/courier-contact`);

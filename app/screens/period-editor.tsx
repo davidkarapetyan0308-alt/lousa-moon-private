@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { DateCalendarPicker } from '../../src/components/DateCalendarPicker';
 import { ModalScreen, ScreenScroll } from '../../src/components/layout';
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
-import { PressScale, PrimaryAction, SectionHeader, SurfaceCard } from '../../src/components/ui';
+import { InlineMessage, PressScale, PrimaryButton, SectionHeader, SurfaceCard } from '../../src/components/ui';
 import { FlowLevel } from '../../src/domain/models';
 import { useCycleStore, useUserStore } from '../../src/store';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -17,17 +17,17 @@ const COPY = {
   ru: {
     title: 'Редактор менструации', start: 'Первый день', end: 'Последний день', noEnd: 'Ещё продолжается', flow: 'Интенсивность по дням',
     pain: 'Боль 0–10', products: 'Использовано средств', leak: 'Ночное протекание', note: 'Заметка', save: 'Сохранить', delete: 'Удалить запись',
-    invalid: 'Дата окончания не может быть раньше начала.', deleteTitle: 'Удалить запись?', cancel: 'Отмена', yes: 'Да', no: 'Нет',
+    invalid: 'Дата окончания не может быть раньше начала.', updateWarning: 'Изменение даты обновит прогноз и напоминания.', updateTitle: 'Сохранить изменения?', updateText: 'Прогноз цикла и расписание напоминаний будут пересчитаны.', updateConfirm: 'Сохранить', deleteTitle: 'Удалить запись?', cancel: 'Отмена', yes: 'Да', no: 'Нет',
     flows: { spotting: 'Spotting', light: 'Лёгкая', medium: 'Средняя', heavy: 'Обильная', very_heavy: 'Очень обильная' },
   },
   en: {
     title: 'Period editor', start: 'First day', end: 'Last day', noEnd: 'Still ongoing', flow: 'Daily flow', pain: 'Pain 0–10', products: 'Products used', leak: 'Night leakage', note: 'Note', save: 'Save', delete: 'Delete record',
-    invalid: 'The end date cannot be before the start date.', deleteTitle: 'Delete this record?', cancel: 'Cancel', yes: 'Yes', no: 'No',
+    invalid: 'The end date cannot be before the start date.', updateWarning: 'Changing a date updates the forecast and reminders.', updateTitle: 'Save changes?', updateText: 'Your cycle forecast and reminder schedule will be recalculated.', updateConfirm: 'Save', deleteTitle: 'Delete this record?', cancel: 'Cancel', yes: 'Yes', no: 'No',
     flows: { spotting: 'Spotting', light: 'Light', medium: 'Medium', heavy: 'Heavy', very_heavy: 'Very heavy' },
   },
   hy: {
     title: 'Դաշտանի խմբագրիչ', start: 'Առաջին օրը', end: 'Վերջին օրը', noEnd: 'Դեռ շարունակվում է', flow: 'Օրական ինտենսիվություն', pain: 'Ցավ 0–10', products: 'Օգտագործված միջոցներ', leak: 'Գիշերային արտահոսք', note: 'Նշում', save: 'Պահպանել', delete: 'Ջնջել գրառումը',
-    invalid: 'Ավարտի օրը չի կարող սկզբից շուտ լինել։', deleteTitle: 'Ջնջե՞լ գրառումը', cancel: 'Չեղարկել', yes: 'Այո', no: 'Ոչ',
+    invalid: 'Ավարտի օրը չի կարող սկզբից շուտ լինել։', updateWarning: 'Ամսաթվի փոփոխությունը կթարմացնի կանխատեսումն ու հիշեցումները։', updateTitle: 'Պահպանե՞լ փոփոխությունները', updateText: 'Ցիկլի կանխատեսումն ու հիշեցումների ժամանակացույցը կվերահաշվարկվեն։', updateConfirm: 'Պահպանել', deleteTitle: 'Ջնջե՞լ գրառումը', cancel: 'Չեղարկել', yes: 'Այո', no: 'Ոչ',
     flows: { spotting: 'Թեթև spotting', light: 'Թեթև', medium: 'Միջին', heavy: 'Առատ', very_heavy: 'Շատ առատ' },
   },
 } as const;
@@ -55,11 +55,7 @@ export default function PeriodEditorScreen() {
     return Array.from({ length }, (_, index) => toLocalDateString(addLocalDays(startDate, index)));
   }, [startDate, endDate]);
 
-  const save = () => {
-    if (endDate && endDate < startDate) {
-      Alert.alert(copy.invalid);
-      return;
-    }
+  const persistRecord = () => {
     const payload = {
       startDate,
       endDate,
@@ -77,6 +73,22 @@ export default function PeriodEditorScreen() {
     router.back();
   };
 
+  const save = () => {
+    if (endDate && endDate < startDate) {
+      Alert.alert(copy.invalid);
+      return;
+    }
+    const datesChanged = Boolean(existing && (existing.startDate !== startDate || (existing.endDate || null) !== endDate));
+    if (datesChanged) {
+      Alert.alert(copy.updateTitle, copy.updateText, [
+        { text: copy.cancel, style: 'cancel' },
+        { text: copy.updateConfirm, onPress: persistRecord },
+      ]);
+      return;
+    }
+    persistRecord();
+  };
+
   const remove = () => {
     if (!existing) return;
     Alert.alert(copy.deleteTitle, undefined, [
@@ -88,6 +100,7 @@ export default function PeriodEditorScreen() {
   return (
     <ModalScreen title={copy.title} closeIcon="arrow_back" keyboard>
       <ScreenScroll contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {existing ? <InlineMessage tone="warning" title={copy.updateWarning} body={copy.updateText} /> : null}
         <SectionHeader title={copy.start} />
         <DateCalendarPicker value={startDate} onChange={(value) => { setStartDate(value); if (endDate && endDate < value) setEndDate(null); }} language={language} maximumDate={today} />
 
@@ -137,7 +150,7 @@ export default function PeriodEditorScreen() {
           </SurfaceCard>
         ))}
 
-        <PrimaryAction label={copy.save} icon="check" onPress={save} />
+        <PrimaryButton label={copy.save} icon="check" onPress={save} />
         {existing ? (
           <PressScale onPress={remove} style={styles.deleteButton}>
             <MaterialSymbol name="delete" size={19} color={LousaPalette.danger} />

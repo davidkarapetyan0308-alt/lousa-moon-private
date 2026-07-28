@@ -1,0 +1,7 @@
+$ npm run test:integration -- --runInBand
+
+> lousa-moon@1.18.22 test:integration
+> jest --config jest.integration.config.cjs --runInBand
+
+sh: 1: jest: not found
+EXIT=127

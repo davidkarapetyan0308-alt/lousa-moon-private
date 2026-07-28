@@ -25,9 +25,16 @@ import {
 } from "../../src/components/LousaMapLibreAddressMap";
 import { MaterialSymbol } from "../../src/components/MaterialSymbol";
 import {
+  CheckboxRow,
+  ChoiceChip,
+  IconButton,
+  InlineMessage,
   PressScale,
-  PrimaryAction,
+  PrimaryButton,
+  SecondaryButton,
+  SectionSurface,
   StatusPill,
+  StickyBottomAction,
   SurfaceCard,
 } from "../../src/components/ui";
 import type {
@@ -62,6 +69,7 @@ import {
 } from "../../src/services/addressDraft";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { LousaPalette } from "../../src/theme/designSystem";
+import { GuestAccountGate } from "../../src/features/auth/components/GuestAccountGate";
 
 const INITIAL_REGION = {
   latitude: GYUMRI_DELIVERY_CENTER.latitude,
@@ -81,6 +89,7 @@ const COPY = {
     recipient: "Получатель",
     phone: "Телефон для доставки",
     contactRequired: "Укажи имя получателя и номер телефона.",
+    missingField: (field: string) => `Не заполнено поле «${field}».`,
     street: "Улица",
     house: "Дом",
     entrance: "Подъезд",
@@ -143,12 +152,12 @@ const COPY = {
     mapNotConfigured:
       "Карта не настроена для этой сборки. Введите адрес вручную — LOUSA проверит зону доставки перед заказом.",
     serverNotConfigured:
-      "Backend API не настроен для телефона. На Android нельзя использовать localhost.",
+      "Сервис адресов временно недоступен. Черновик сохранён на телефоне — попробуйте ещё раз позже.",
     zoneUnselected: "Адрес ещё не проверен",
     zoneUnavailable: "Зона не проверена",
     zoneUnavailableBody:
       "Не удалось подтвердить зону доставки через сервер. Зелёный статус не будет показан без реальной проверки.",
-    saveUnavailable: "Для сохранения адреса нужен доступный backend LOUSA.",
+    saveUnavailable: "Сервис адресов временно недоступен. Черновик сохранён на телефоне — попробуйте позже.",
     saveFailed:
       "Адрес пока не сохранён. Заполненные данные остались на экране — проверь интернет и повтори.",
     mapLoadFailed: "Не удалось загрузить карту.",
@@ -171,6 +180,7 @@ const COPY = {
     recipient: "Recipient",
     phone: "Delivery phone",
     contactRequired: "Enter the recipient name and phone number.",
+    missingField: (field: string) => `The “${field}” field is missing.`,
     street: "Street",
     house: "Building",
     entrance: "Entrance",
@@ -234,13 +244,13 @@ const COPY = {
     mapNotConfigured:
       "Map provider is not configured for this build. Enter the address manually and LOUSA will check the delivery zone.",
     serverNotConfigured:
-      "Backend API is not configured for this phone build. Android cannot use localhost.",
+      "The address service is temporarily unavailable. Your draft is saved on this phone—try again later.",
     zoneUnselected: "Address not verified yet",
     zoneUnavailable: "Zone not verified",
     zoneUnavailableBody:
       "LOUSA could not confirm the delivery zone with the server. A green status is never shown without a real check.",
     saveUnavailable:
-      "A reachable LOUSA backend is required to save this address.",
+      "The address service is temporarily unavailable. Your draft is saved on this phone—try again later.",
     saveFailed:
       "The address is not saved yet. Your entries remain on screen — check the connection and retry.",
     mapLoadFailed: "The map could not be loaded.",
@@ -263,6 +273,7 @@ const COPY = {
     recipient: "Ստացող",
     phone: "Առաքման հեռախոս",
     contactRequired: "Նշիր ստացողի անունը և հեռախոսահամարը։",
+    missingField: (field: string) => `«${field}» դաշտը լրացված չէ։`,
     street: "Փողոց",
     house: "Տուն",
     entrance: "Մուտք",
@@ -326,13 +337,13 @@ const COPY = {
     mapNotConfigured:
       "Այս տարբերակում քարտեզը կարգավորված չէ։ Մուտքագրեք հասցեն ձեռքով, իսկ LOUSA-ն կստուգի առաքման գոտին։",
     serverNotConfigured:
-      "Backend API-ն կարգավորված չէ հեռախոսի համար։ Android-ում localhost-ը չի աշխատում Mac-ի փոխարեն։",
+      "Հասցեների ծառայությունը ժամանակավորապես անհասանելի է։ Սևագիրը պահպանված է հեռախոսում․ փորձեք ավելի ուշ։",
     zoneUnselected: "Հասցեն դեռ չի ստուգվել",
     zoneUnavailable: "Գոտին չի ստուգվել",
     zoneUnavailableBody:
       "Չհաջողվեց սերվերով հաստատել առաքման գոտին։ Առանց իրական ստուգման կանաչ կարգավիճակ չի ցուցադրվի։",
     saveUnavailable:
-      "Հասցեն պահպանելու համար անհրաժեշտ է հասանելի LOUSA backend։",
+      "Հասցեների ծառայությունը ժամանակավորապես անհասանելի է։ Սևագիրը պահպանված է հեռախոսում․ փորձեք ավելի ուշ։",
     saveFailed: "Չհաջողվեց հասցեն պահպանել սերվերում։ Ստուգիր կապը և կրկնիր։",
     mapLoadFailed: "Չհաջողվեց բեռնել քարտեզը։",
     retry: "Կրկնել",
@@ -367,6 +378,14 @@ function makeSessionToken() {
 }
 
 export default function AddressMapScreen() {
+  const language = useUserStore((state) => state.language);
+  const isGuestMode = useUserStore((state) => state.isGuestMode);
+  const copy = COPY[language] || COPY.ru;
+  if (isGuestMode) return <GuestAccountGate screenTitle={copy.title} />;
+  return <AuthenticatedAddressMapScreen />;
+}
+
+function AuthenticatedAddressMapScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { colors, isDark } = useTheme();
@@ -863,12 +882,22 @@ export default function AddressMapScreen() {
 
   const confirmAddress = async () => {
     setError("");
-    if (!recipientName.trim() || !deliveryPhone.trim()) {
-      setError(copy.contactRequired);
-      return;
-    }
-    if (!street.trim() || !house.trim()) {
-      setError(copy.addressRequired);
+    const requiredFields: Array<[string, string]> = [
+      [recipientName, copy.recipient],
+      [deliveryPhone, copy.phone],
+      [street, copy.street],
+      [house, copy.house],
+    ];
+    if (addressType === "apartment") requiredFields.push([apartment, copy.apartment]);
+    if (addressType === "office" || addressType === "workplace") requiredFields.push([officeNumber, copy.officeNumber]);
+    if (addressType === "hotel") requiredFields.push([hotelName, copy.hotelName], [roomNumber, copy.roomNumber]);
+    const missingField = requiredFields.find(([value]) => !value.trim())?.[1];
+    if (missingField) {
+      if (!recipientName.trim() || !deliveryPhone.trim()) {
+        setError(copy.contactRequired);
+        return;
+      }
+      setError(copy.missingField(missingField));
       return;
     }
     if (!coordinateChosen) {
@@ -934,6 +963,11 @@ export default function AddressMapScreen() {
       formattedAddress,
       provider: baseAddress.provider,
       providerPlaceId: baseAddress.providerPlaceId,
+      fieldOrigins: {
+        ...(baseAddress.fieldOrigins || {}),
+        street: street.trim() === baseAddress.street ? (baseAddress.fieldOrigins?.street || 'provider_confirmed') : 'user_entered',
+        house: house.trim() === baseAddress.house ? (baseAddress.fieldOrigins?.house || 'provider_confirmed') : 'user_entered',
+      },
       deliveryZoneId: zone.deliveryZoneId,
       deliveryFeeMinor: 0,
       estimatedMinutes: zone.estimatedMinutes,
@@ -1025,7 +1059,7 @@ export default function AddressMapScreen() {
           style={styles.flex}
           contentContainerStyle={[
             styles.screenContent,
-            { paddingBottom: Math.max(48, insets.bottom + 36) },
+            { paddingBottom: 28 },
           ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={
@@ -1033,16 +1067,11 @@ export default function AddressMapScreen() {
           }
         >
           <View style={styles.header}>
-            <PressScale
+            <IconButton
+              icon="arrow_back"
+              label={language === "ru" ? "Назад" : language === "hy" ? "Հետ" : "Back"}
               onPress={() => router.back()}
-              style={[styles.iconButton, { backgroundColor: colors.surface }]}
-            >
-              <MaterialSymbol
-                name="arrow_back"
-                size={22}
-                color={colors.onBackground}
-              />
-            </PressScale>
+            />
             <View style={styles.headerText}>
               <Text
                 style={[
@@ -1202,16 +1231,16 @@ export default function AddressMapScreen() {
                   color={LousaPalette.berry}
                 />
                 <Text style={styles.mapErrorText}>{copy.mapLoadFailed}</Text>
-                <PressScale
+                <SecondaryButton
+                  label={copy.retry}
+                  compact
+                  fullWidth={false}
                   onPress={() => {
                     setMapError("");
                     setMapReady(false);
                     setMapInstanceKey((value) => value + 1);
                   }}
-                  style={styles.retryButton}
-                >
-                  <Text style={styles.retryButtonText}>{copy.retry}</Text>
-                </PressScale>
+                />
               </View>
             ) : null}
             {realMapReady ? (
@@ -1236,7 +1265,10 @@ export default function AddressMapScreen() {
           </View>
 
           {realMapReady ? (
-            <PressScale
+            <SecondaryButton
+              label={copy.openMap}
+              icon="open_in_full"
+              iconPlacement="left"
               onPress={() => {
                 openPicker({
                   latitude: coordinate.latitude,
@@ -1245,21 +1277,7 @@ export default function AddressMapScreen() {
                 });
                 router.push("/screens/address-map-picker");
               }}
-              style={[
-                styles.openMapButton,
-                {
-                  borderColor: colors.outlineVariant,
-                  backgroundColor: colors.surface,
-                },
-              ]}
-            >
-              <MaterialSymbol
-                name="open_in_full"
-                size={19}
-                color={LousaPalette.berry}
-              />
-              <Text style={styles.openMapButtonText}>{copy.openMap}</Text>
-            </PressScale>
+            />
           ) : null}
 
           {message ? (
@@ -1300,7 +1318,7 @@ export default function AddressMapScreen() {
             </View>
           ) : null}
 
-          <SurfaceCard padding={18}>
+          <SectionSurface>
             <View style={styles.zoneHead}>
               <View style={styles.flex}>
                 <Text
@@ -1370,38 +1388,12 @@ export default function AddressMapScreen() {
             </Text>
             <View style={styles.labelRow}>
               {labelChoices.map((item) => (
-                <PressScale
+                <ChoiceChip
                   key={item.value}
+                  label={item.label}
+                  selected={label === item.value}
                   onPress={() => setLabel(item.value)}
-                  style={[
-                    styles.labelChip,
-                    {
-                      borderColor:
-                        label === item.value
-                          ? LousaPalette.berry
-                          : colors.outlineVariant,
-                    },
-                    label === item.value && {
-                      backgroundColor: isDark
-                        ? "rgba(217,133,165,0.16)"
-                        : "#F8E7ED",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.labelChipText,
-                      {
-                        color:
-                          label === item.value
-                            ? LousaPalette.berry
-                            : colors.onSurfaceVariant,
-                      },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </PressScale>
+                />
               ))}
             </View>
 
@@ -1410,38 +1402,12 @@ export default function AddressMapScreen() {
             </Text>
             <View style={styles.labelRow}>
               {addressTypeChoices.map((item) => (
-                <PressScale
+                <ChoiceChip
                   key={item.value}
+                  label={item.label}
+                  selected={addressType === item.value}
                   onPress={() => setAddressType(item.value)}
-                  style={[
-                    styles.labelChip,
-                    {
-                      borderColor:
-                        addressType === item.value
-                          ? LousaPalette.berry
-                          : colors.outlineVariant,
-                    },
-                    addressType === item.value && {
-                      backgroundColor: isDark
-                        ? "rgba(217,133,165,0.16)"
-                        : "#F8E7ED",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.labelChipText,
-                      {
-                        color:
-                          addressType === item.value
-                            ? LousaPalette.berry
-                            : colors.onSurfaceVariant,
-                      },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </PressScale>
+                />
               ))}
             </View>
 
@@ -1478,14 +1444,12 @@ export default function AddressMapScreen() {
                 >
                   {copy.addressChanged}
                 </Text>
-                <PressScale
+                <SecondaryButton
+                  label={copy.recheckPoint}
+                  compact
+                  fullWidth={false}
                   onPress={() => void recheckManualAddressPoint()}
-                  style={styles.addressRecheckButton}
-                >
-                  <Text style={styles.addressRecheckButtonText}>
-                    {copy.recheckPoint}
-                  </Text>
-                </PressScale>
+                />
               </View>
             ) : null}
             {addressType === "apartment" ? (
@@ -1593,38 +1557,12 @@ export default function AddressMapScreen() {
             </Text>
             <View style={styles.labelRow}>
               {handoffChoices.map((item) => (
-                <PressScale
+                <ChoiceChip
                   key={item.value}
+                  label={item.label}
+                  selected={handoffType === item.value}
                   onPress={() => setHandoffType(item.value)}
-                  style={[
-                    styles.labelChip,
-                    {
-                      borderColor:
-                        handoffType === item.value
-                          ? LousaPalette.berry
-                          : colors.outlineVariant,
-                    },
-                    handoffType === item.value && {
-                      backgroundColor: isDark
-                        ? "rgba(217,133,165,0.16)"
-                        : "#F8E7ED",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.labelChipText,
-                      {
-                        color:
-                          handoffType === item.value
-                            ? LousaPalette.berry
-                            : colors.onSurfaceVariant,
-                      },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </PressScale>
+                />
               ))}
             </View>
             {handoffType === "leave_at_door" ? (
@@ -1674,15 +1612,21 @@ export default function AddressMapScreen() {
                 },
               ]}
             />
-          </SurfaceCard>
+          </SectionSurface>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <PrimaryAction
-            label={saving ? `${copy.confirm}…` : copy.confirm}
-            icon="location_on"
-            onPress={() => void confirmAddress()}
-          />
         </ScrollView>
+        {error ? (
+          <View style={styles.footerMessage}>
+            <InlineMessage body={error} tone="danger" />
+          </View>
+        ) : null}
+        <StickyBottomAction
+          primaryLabel={copy.confirm}
+          primaryIcon="location_on"
+          primaryLoading={saving}
+          onPrimary={() => void confirmAddress()}
+          bottomInset={insets.bottom}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1697,40 +1641,7 @@ function BooleanOption({
   value: boolean;
   onPress: () => void;
 }) {
-  const { colors, isDark } = useTheme();
-  return (
-    <PressScale
-      onPress={onPress}
-      style={[
-        styles.booleanOption,
-        {
-          borderColor: value ? LousaPalette.berry : colors.outlineVariant,
-          backgroundColor: value
-            ? isDark
-              ? "rgba(217,133,165,0.14)"
-              : "#F8E7ED"
-            : "transparent",
-        },
-      ]}
-    >
-      <View
-        style={[
-          styles.booleanCheck,
-          {
-            borderColor: value ? LousaPalette.berry : colors.outlineVariant,
-            backgroundColor: value ? LousaPalette.berry : "transparent",
-          },
-        ]}
-      >
-        {value ? (
-          <MaterialSymbol name="check" size={14} color="#FFFFFF" />
-        ) : null}
-      </View>
-      <Text style={[styles.booleanText, { color: colors.onBackground }]}>
-        {label}
-      </Text>
-    </PressScale>
-  );
+  return <CheckboxRow label={label} checked={value} onPress={onPress} />;
 }
 
 function Field({
@@ -1774,6 +1685,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
   screenContent: { paddingHorizontal: 14, paddingTop: 6, gap: 12 },
+  footerMessage: { paddingHorizontal: 20, paddingTop: 8 },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",

@@ -24,6 +24,16 @@ export interface ServiceError {
 
 export type ServiceResult<T> = { ok: true; data: T } | { ok: false; error: ServiceError };
 
+export type AuthSessionState =
+  | 'unauthenticated'
+  | 'firebase_authenticated'
+  | 'backend_session_pending'
+  | 'authenticated'
+  | 'guest'
+  | 'local_limited_mode'
+  | 'session_expired'
+  | 'session_error';
+
 export interface SessionInfo {
   userId: string;
   sessionId: string;
@@ -35,11 +45,14 @@ export interface SessionInfo {
   name?: string;
   avatarUri?: string | null;
   isNewUser?: boolean;
+  sessionState?: AuthSessionState;
+  backendSessionReady?: boolean;
+  limitedReason?: string;
 }
 
 export interface AuthService {
   signIn(email: string, password: string): Promise<ServiceResult<SessionInfo>>;
-  signInWithGoogle?(idToken: string): Promise<ServiceResult<SessionInfo>>;
+  signInWithGoogle?(idToken: string, context?: { attemptId?: string }): Promise<ServiceResult<SessionInfo>>;
   startPhoneAuth?(input: { phone: string; language?: 'ru' | 'en' | 'hy' }): Promise<ServiceResult<{ expiresAt: string; resendAfterSeconds?: number; smsDelivery?: { provider: string; configured: boolean; devMode?: boolean }; devCode?: string }>>;
   verifyPhoneAuth?(input: { phone: string; code: string }): Promise<ServiceResult<SessionInfo>>;
   register?(input: { name: string; email: string; password: string; language?: 'ru' | 'en' | 'hy' }): Promise<ServiceResult<{ expiresAt: string; resendAfterSeconds?: number; emailDelivery?: { provider: string; configured: boolean; devMode?: boolean }; devCode?: string; firebaseSessionReady?: boolean; firebaseEmailVerificationSent?: boolean; session?: SessionInfo }>>;
@@ -48,6 +61,7 @@ export interface AuthService {
   signOut(): Promise<ServiceResult<void>>;
   signOutAll?(): Promise<ServiceResult<void>>;
   refreshSession?(): Promise<ServiceResult<SessionInfo>>;
+  retryBackendSession?(): Promise<ServiceResult<SessionInfo>>;
   requestEmailCode?(email: string): Promise<ServiceResult<{ expiresAt: string }>>;
   verifyEmailCode?(email: string, code: string): Promise<ServiceResult<SessionInfo>>;
   requestPasswordReset?(email: string, language?: 'ru' | 'en' | 'hy'): Promise<ServiceResult<{ emailDelivery?: { provider: string; configured: boolean; devMode?: boolean }; devCode?: string } | void>>;
@@ -96,9 +110,18 @@ export type SubscriptionAction =
   | { action: 'resume' }
   | { action: 'cancel'; reason?: string };
 
+export type SubscriptionActivationInput = {
+  orderId: string;
+  plan: SubscriptionModel['plan'];
+  deliveryAddressId: string;
+  deliveryWindow?: string;
+  preferredDeliveryDate?: string | null;
+  preferredWeekday?: number | null;
+};
+
 export interface SubscriptionService {
   getSubscription(): Promise<ServiceResult<SubscriptionModel | null>>;
-  saveSubscription(subscription: SubscriptionModel & { orderId?: string }): Promise<ServiceResult<SubscriptionModel>>;
+  saveSubscription(subscription: SubscriptionActivationInput): Promise<ServiceResult<SubscriptionModel>>;
   updateSubscription(input: SubscriptionAction): Promise<ServiceResult<SubscriptionModel | null>>;
 }
 
@@ -127,6 +150,7 @@ export interface SupportService {
   getTicket(ticketId: string): Promise<ServiceResult<SupportTicket>>;
   createTicket(input: { subject: string; message: string; category?: string; orderId?: string | null }): Promise<ServiceResult<SupportTicket>>;
   sendMessage(ticketId: string, message: string): Promise<ServiceResult<SupportTicket>>;
+  closeTicket(ticketId: string): Promise<ServiceResult<SupportTicket>>;
   getCourierContact(orderId: string): Promise<ServiceResult<CourierContact>>;
   sendCourierMessage(orderId: string, message: string): Promise<ServiceResult<{ ok: boolean; ticketId: string; message: string }>>;
 }

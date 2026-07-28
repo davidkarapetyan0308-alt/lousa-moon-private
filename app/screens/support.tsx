@@ -10,6 +10,8 @@ import { apiAdminV22SyncService, apiOrderService, apiSupportService } from '../.
 import { useUserStore } from '../../src/store';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { LousaPalette } from '../../src/theme/designSystem';
+import { getUserFacingErrorMessage } from '../../src/services/errorMessages';
+import { GuestAccountGate } from '../../src/features/auth/components/GuestAccountGate';
 
 const SENSITIVE_WORDS = [
   'цикл', 'месяч', 'менстру', 'овуляц', 'беремен', 'кров', 'боль', 'симптом', 'настроен', 'mood', 'period', 'cycle', 'pain', 'symptom', 'pregnan', 'ovulat',
@@ -30,6 +32,7 @@ const COPY = {
     subject: 'Тема',
     message: 'Сообщение',
     send: 'Отправить',
+    cancel: 'Отмена',
     reply: 'Ответить',
     replyPlaceholder: 'Напишите ответ команде LOUSA',
     sent: 'Обращение создано',
@@ -48,13 +51,13 @@ const COPY = {
     internalHidden: 'Internal notes и служебные комментарии админки скрыты от пользователя.',
     customerVisible: 'Видно вам и поддержке',
     error: 'Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.',
-    refresh: 'Обновить',
+    refresh: 'Обновить', lastReply: 'Последний ответ', closeTicket: 'Закрыть обращение', closeTitle: 'Закрыть обращение?', closeText: 'После закрытия история останется доступна. При необходимости можно создать новое обращение.', closeConfirm: 'Закрыть', closeDone: 'Обращение закрыто', topics: ['Не могу войти', 'Не могу найти адрес', 'Проблема с доставкой', 'Вопрос по циклу', 'Проблема с оплатой', 'Техническая ошибка'],
   },
   en: {
-    appBar: 'Support', title: 'LOUSA support', subtitle: 'Message LOUSA, see admin replies, and contact the courier once delivery is assigned.', synced: 'Admin panel sync is active', syncIssue: 'Admin panel sync check is unavailable', safety: 'Communication safety', safetyText: 'Support sees only safe ticket and order details. The courier sees only recipient name, phone, address and delivery window. Cycle, symptoms, mood, pain and private notes are hidden.', order: 'Related order', noOrders: 'No active orders yet. You can still message support.', support: 'New ticket', subject: 'Subject', message: 'Message', send: 'Send', reply: 'Reply', replyPlaceholder: 'Write a reply to LOUSA support', sent: 'Ticket created', sentText: 'The LOUSA team will see it in the admin Support Inbox and reply here.', courier: 'Courier', courierUnavailable: 'Courier contact appears after delivery is assigned.', callCourier: 'Call courier', messageCourier: 'Message courier', courierMessageHint: 'Keep it short: entrance, landmark or handoff note. Do not send medical data.', courierBlockedTitle: 'Do not send this to the courier', courierBlockedText: 'This may contain cycle or health details. Send it to LOUSA support instead, not the courier.', courierSent: 'Message passed to the delivery team.', tickets: 'Your tickets', emptyTickets: 'Your support history and LOUSA replies will appear here.', noMessages: 'No messages yet.', internalHidden: 'Admin internal notes are hidden from you.', customerVisible: 'Visible to you and support', error: 'Could not reach the server. Check your connection and try again.', refresh: 'Refresh',
+    appBar: 'Support', title: 'LOUSA support', subtitle: 'Message LOUSA, see admin replies, and contact the courier once delivery is assigned.', synced: 'Admin panel sync is active', syncIssue: 'Admin panel sync check is unavailable', safety: 'Communication safety', safetyText: 'Support sees only safe ticket and order details. The courier sees only recipient name, phone, address and delivery window. Cycle, symptoms, mood, pain and private notes are hidden.', order: 'Related order', noOrders: 'No active orders yet. You can still message support.', support: 'New ticket', subject: 'Subject', message: 'Message', send: 'Send', cancel: 'Cancel', reply: 'Reply', replyPlaceholder: 'Write a reply to LOUSA support', sent: 'Ticket created', sentText: 'The LOUSA team will see it in the admin Support Inbox and reply here.', courier: 'Courier', courierUnavailable: 'Courier contact appears after delivery is assigned.', callCourier: 'Call courier', messageCourier: 'Message courier', courierMessageHint: 'Keep it short: entrance, landmark or handoff note. Do not send medical data.', courierBlockedTitle: 'Do not send this to the courier', courierBlockedText: 'This may contain cycle or health details. Send it to LOUSA support instead, not the courier.', courierSent: 'Message passed to the delivery team.', tickets: 'Your tickets', emptyTickets: 'Your support history and LOUSA replies will appear here.', noMessages: 'No messages yet.', internalHidden: 'Admin internal notes are hidden from you.', customerVisible: 'Visible to you and support', error: 'Could not reach the server. Check your connection and try again.', refresh: 'Refresh', lastReply: 'Last reply', closeTicket: 'Close ticket', closeTitle: 'Close this ticket?', closeText: 'The conversation will remain in your history. You can create a new ticket later.', closeConfirm: 'Close', closeDone: 'Ticket closed', topics: ['Cannot sign in', 'Cannot find address', 'Delivery problem', 'Cycle question', 'Payment problem', 'Technical issue'],
   },
   hy: {
-    appBar: 'Աջակցություն', title: 'LOUSA աջակցություն', subtitle: 'Գրեք LOUSA թիմին, տեսեք ադմին վահանակի պատասխանները և կապվեք առաքիչի հետ, երբ առաքումը նշանակված է։', synced: 'Ադմին վահանակի կապը ակտիվ է', syncIssue: 'Ադմին վահանակի կապի ստուգումը հասանելի չէ', safety: 'Հաղորդակցության անվտանգություն', safetyText: 'Աջակցությունը տեսնում է միայն անվտանգ դիմումի և պատվերի տվյալներ։ Առաքիչը տեսնում է միայն ստացողի անունը, հեռախոսը, հասցեն և առաքման պատուհանը։ Ցիկլը, ախտանիշները, տրամադրությունը, ցավը և անձնական նշումները թաքցված են։', order: 'Կապված պատվեր', noOrders: 'Ակտիվ պատվեր դեռ չկա։ Կարող եք գրել աջակցությանը։', support: 'Նոր դիմում', subject: 'Թեմա', message: 'Հաղորդագրություն', send: 'Ուղարկել', reply: 'Պատասխանել', replyPlaceholder: 'Գրեք պատասխան LOUSA աջակցությանը', sent: 'Դիմումը ստեղծվեց', sentText: 'LOUSA թիմը կտեսնի այն ադմին վահանակում և կպատասխանի այստեղ։', courier: 'Առաքիչ', courierUnavailable: 'Առաքիչը կհայտնվի առաքումը նշանակվելուց հետո։', callCourier: 'Զանգել առաքիչին', messageCourier: 'Գրել առաքիչին', courierMessageHint: 'Կարճ՝ մուտք, կողմնորոշիչ կամ փոխանցման ձև։ Մի ուղարկեք բժշկական տվյալներ։', courierBlockedTitle: 'Մի ուղարկեք սա առաքիչին', courierBlockedText: 'Հաղորդագրությունը կարող է պարունակել ցիկլի կամ առողջական տվյալներ։ Ուղարկեք այն LOUSA աջակցությանը։', courierSent: 'Հաղորդագրությունը փոխանցվեց առաքման թիմին։', tickets: 'Ձեր դիմումները', emptyTickets: 'Դիմումների պատմությունն ու պատասխանները կհայտնվեն այստեղ։', noMessages: 'Հաղորդագրություն դեռ չկա։', internalHidden: 'Ադմին ներքին նշումները թաքցված են ձեզանից։', customerVisible: 'Տեսանելի է ձեզ և աջակցությանը', error: 'Չհաջողվեց կապվել սերվերի հետ։ Ստուգեք կապը և փորձեք կրկին։', refresh: 'Թարմացնել',
+    appBar: 'Աջակցություն', title: 'LOUSA աջակցություն', subtitle: 'Գրեք LOUSA թիմին, տեսեք ադմին վահանակի պատասխանները և կապվեք առաքիչի հետ, երբ առաքումը նշանակված է։', synced: 'Ադմին վահանակի կապը ակտիվ է', syncIssue: 'Ադմին վահանակի կապի ստուգումը հասանելի չէ', safety: 'Հաղորդակցության անվտանգություն', safetyText: 'Աջակցությունը տեսնում է միայն անվտանգ դիմումի և պատվերի տվյալներ։ Առաքիչը տեսնում է միայն ստացողի անունը, հեռախոսը, հասցեն և առաքման պատուհանը։ Ցիկլը, ախտանիշները, տրամադրությունը, ցավը և անձնական նշումները թաքցված են։', order: 'Կապված պատվեր', noOrders: 'Ակտիվ պատվեր դեռ չկա։ Կարող եք գրել աջակցությանը։', support: 'Նոր դիմում', subject: 'Թեմա', message: 'Հաղորդագրություն', send: 'Ուղարկել', cancel: 'Չեղարկել', reply: 'Պատասխանել', replyPlaceholder: 'Գրեք պատասխան LOUSA աջակցությանը', sent: 'Դիմումը ստեղծվեց', sentText: 'LOUSA թիմը կտեսնի այն ադմին վահանակում և կպատասխանի այստեղ։', courier: 'Առաքիչ', courierUnavailable: 'Առաքիչը կհայտնվի առաքումը նշանակվելուց հետո։', callCourier: 'Զանգել առաքիչին', messageCourier: 'Գրել առաքիչին', courierMessageHint: 'Կարճ՝ մուտք, կողմնորոշիչ կամ փոխանցման ձև։ Մի ուղարկեք բժշկական տվյալներ։', courierBlockedTitle: 'Մի ուղարկեք սա առաքիչին', courierBlockedText: 'Հաղորդագրությունը կարող է պարունակել ցիկլի կամ առողջական տվյալներ։ Ուղարկեք այն LOUSA աջակցությանը։', courierSent: 'Հաղորդագրությունը փոխանցվեց առաքման թիմին։', tickets: 'Ձեր դիմումները', emptyTickets: 'Դիմումների պատմությունն ու պատասխանները կհայտնվեն այստեղ։', noMessages: 'Հաղորդագրություն դեռ չկա։', internalHidden: 'Ադմին ներքին նշումները թաքցված են ձեզանից։', customerVisible: 'Տեսանելի է ձեզ և աջակցությանը', error: 'Չհաջողվեց կապվել սերվերի հետ։ Ստուգեք կապը և փորձեք կրկին։', refresh: 'Թարմացնել', lastReply: 'Վերջին պատասխանը', closeTicket: 'Փակել դիմումը', closeTitle: 'Փակե՞լ դիմումը', closeText: 'Պատմությունը կմնա հասանելի։ Անհրաժեշտության դեպքում կարող եք ստեղծել նոր դիմում։', closeConfirm: 'Փակել', closeDone: 'Դիմումը փակվեց', topics: ['Չեմ կարող մուտք գործել', 'Չեմ գտնում հասցեն', 'Առաքման խնդիր', 'Ցիկլի հարց', 'Վճարման խնդիր', 'Տեխնիկական սխալ'],
   },
 } as const;
 
@@ -81,7 +84,23 @@ function messageLabel(message: SupportMessage) {
   return 'You';
 }
 
+function formatTicketTime(value: string | null | undefined, language: 'ru' | 'en' | 'hy') {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = language === 'ru' ? 'ru-RU' : language === 'hy' ? 'hy-AM' : 'en-US';
+  return date.toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function SupportScreen() {
+  const language = useUserStore((s) => s.language);
+  const isGuestMode = useUserStore((s) => s.isGuestMode);
+  const copy = COPY[language] || COPY.ru;
+  if (isGuestMode) return <GuestAccountGate screenTitle={copy.appBar} />;
+  return <AuthenticatedSupportScreen />;
+}
+
+function AuthenticatedSupportScreen() {
   const { colors, isDark } = useTheme();
   const language = useUserStore((s) => s.language);
   const copy = COPY[language] || COPY.ru;
@@ -92,6 +111,7 @@ export default function SupportScreen() {
   const [courier, setCourier] = useState<CourierContact | null>(null);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [ticketCategory, setTicketCategory] = useState('OTHER');
   const [replyText, setReplyText] = useState('');
   const [courierMessage, setCourierMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -126,12 +146,13 @@ export default function SupportScreen() {
   const sendTicket = async () => {
     if (!message.trim()) return Alert.alert(copy.support, copy.message);
     setBusy(true);
-    const category = selectedOrderId ? 'ORDER' : 'OTHER';
+    const category = selectedOrderId && ticketCategory === 'OTHER' ? 'ORDER' : ticketCategory;
     const result = await apiSupportService.createTicket({ subject: subject.trim() || copy.support, message: message.trim(), category, orderId: selectedOrderId });
     setBusy(false);
-    if (!result.ok) return Alert.alert(copy.appBar, result.error.message || copy.error);
+    if (!result.ok) return Alert.alert(copy.appBar, getUserFacingErrorMessage(result.error, copy.error));
     setSubject('');
     setMessage('');
+    setTicketCategory('OTHER');
     setSelectedTicketId(result.data.id);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     Alert.alert(copy.sent, copy.sentText);
@@ -143,10 +164,32 @@ export default function SupportScreen() {
     setBusy(true);
     const result = await apiSupportService.sendMessage(selectedTicket.id, replyText.trim());
     setBusy(false);
-    if (!result.ok) return Alert.alert(copy.support, result.error.message || copy.error);
+    if (!result.ok) return Alert.alert(copy.support, getUserFacingErrorMessage(result.error, copy.error));
     setReplyText('');
     setTickets((current) => current.map((ticket) => ticket.id === result.data.id ? result.data : ticket));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  };
+
+  const closeTicket = () => {
+    if (!selectedTicket) return;
+    Alert.alert(copy.closeTitle, copy.closeText, [
+      { text: copy.cancel || 'Cancel', style: 'cancel' },
+      {
+        text: copy.closeConfirm,
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setBusy(true);
+            const result = await apiSupportService.closeTicket(selectedTicket.id);
+            setBusy(false);
+            if (!result.ok) return Alert.alert(copy.support, getUserFacingErrorMessage(result.error, copy.error));
+            setTickets((current) => current.map((ticket) => ticket.id === result.data.id ? result.data : ticket));
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            Alert.alert(copy.support, copy.closeDone);
+          })();
+        },
+      },
+    ]);
   };
 
   const callCourier = async () => {
@@ -164,7 +207,7 @@ export default function SupportScreen() {
     setBusy(true);
     const result = await apiSupportService.sendCourierMessage(selectedOrderId, courierMessage.trim());
     setBusy(false);
-    if (!result.ok) return Alert.alert(copy.courier, result.error.message || copy.error);
+    if (!result.ok) return Alert.alert(copy.courier, getUserFacingErrorMessage(result.error, copy.error));
     setCourierMessage('');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     Alert.alert(copy.courier, copy.courierSent);
@@ -255,6 +298,7 @@ export default function SupportScreen() {
                     <StatusPill label={ticket.status} tone={statusTone(ticket.status)} />
                   </View>
                   <Text style={[styles.body, { color: colors.onSurfaceVariant }]}>{ticket.safeSummary}</Text>
+                  {ticket.lastMessageAt ? <Text style={[styles.meta, { color: colors.onSurfaceVariant }]}>{copy.lastReply}: {formatTicketTime(ticket.lastMessageAt, language)}</Text> : null}
                   {ticket.orderCode ? <Text style={[styles.meta, { color: colors.onSurfaceVariant }]}>{ticket.orderCode}</Text> : null}
                 </SurfaceCard>
               </PressScale>
@@ -276,6 +320,7 @@ export default function SupportScreen() {
                 <>
                   <TextInput value={replyText} onChangeText={setReplyText} multiline placeholder={copy.replyPlaceholder} placeholderTextColor={colors.onSurfaceVariant} style={[styles.textArea, styles.replyArea, { color: colors.onBackground, borderColor: colors.outlineVariant }]} />
                   <PressScale disabled={busy || !replyText.trim()} onPress={replyToTicket} style={[styles.primaryWide, (!replyText.trim() || busy) && styles.disabled]}><Text style={styles.primaryText}>{copy.reply}</Text></PressScale>
+                  <PressScale disabled={busy} onPress={closeTicket} style={styles.closeAction}><Text style={styles.closeActionText}>{copy.closeTicket}</Text></PressScale>
                 </>
               ) : null}
             </SurfaceCard>
@@ -285,6 +330,23 @@ export default function SupportScreen() {
         <View style={styles.section}>
           <SectionHeader title={copy.support} />
           <SurfaceCard padding={16}>
+            <View style={styles.topicList}>
+              {copy.topics.map((topic, index) => {
+                const categories = ['ACCOUNT', 'OTHER', 'DELIVERY', 'OTHER', 'PAYMENT', 'OTHER'];
+                const active = subject === topic;
+                return (
+                  <PressScale
+                    key={topic}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => { setSubject(topic); setTicketCategory(categories[index]); }}
+                    style={[styles.topicChip, active && styles.topicChipActive]}
+                  >
+                    <Text style={[styles.topicText, active && styles.topicTextActive]}>{topic}</Text>
+                  </PressScale>
+                );
+              })}
+            </View>
             <Text style={[styles.inputLabel, { color: colors.onBackground }]}>{copy.subject}</Text>
             <TextInput value={subject} onChangeText={setSubject} placeholder={copy.subject} placeholderTextColor={colors.onSurfaceVariant} style={[styles.input, { color: colors.onBackground, borderColor: colors.outlineVariant }]} />
             <Text style={[styles.inputLabel, { color: colors.onBackground }]}>{copy.message}</Text>
@@ -311,6 +373,11 @@ const styles = StyleSheet.create({
   orderRowActiveDark: { backgroundColor: 'rgba(217,133,165,0.14)' },
   orderText: { fontFamily: 'sans-serif-medium', fontSize: 13 },
   inputLabel: { fontFamily: 'sans-serif-medium', fontSize: 13, marginTop: 12, marginBottom: 8 },
+  topicList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  topicChip: { minHeight: 48, borderRadius: 16, borderWidth: 1, borderColor: '#E8DFE4', paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  topicChipActive: { borderColor: LousaPalette.berry, backgroundColor: '#F8E7ED' },
+  topicText: { fontFamily: 'sans-serif-medium', fontSize: 12, color: '#716771' },
+  topicTextActive: { color: LousaPalette.berry },
   input: { minHeight: 52, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, fontFamily: 'sans-serif', fontSize: 15 },
   textArea: { minHeight: 112, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingTop: 12, fontFamily: 'sans-serif', fontSize: 15, textAlignVertical: 'top' },
   replyArea: { marginTop: 14, minHeight: 92 },
@@ -318,6 +385,8 @@ const styles = StyleSheet.create({
   primaryAction: { backgroundColor: LousaPalette.berry, borderRadius: 18, paddingHorizontal: 16, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   primaryWide: { backgroundColor: LousaPalette.berry, borderRadius: 20, minHeight: 52, marginTop: 14, alignItems: 'center', justifyContent: 'center' },
   primaryText: { color: '#fff', fontFamily: 'sans-serif-medium', fontSize: 15 },
+  closeAction: { minHeight: 48, marginTop: 8, alignItems: 'center', justifyContent: 'center' },
+  closeActionText: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 14 },
   disabled: { opacity: 0.45 },
   ticketCard: { marginBottom: 10 },
   ticketActive: { borderColor: LousaPalette.berry, borderWidth: 1 },

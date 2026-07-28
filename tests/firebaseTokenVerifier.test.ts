@@ -9,6 +9,7 @@ const env = {
   firebaseServiceAccountJson: null,
   firebaseClientEmail: null,
   firebasePrivateKey: null,
+  allowFirebaseRestFallback: true,
 } as ApiEnv;
 
 describe('Firebase token verifier', () => {
@@ -50,4 +51,9 @@ describe('Firebase token verifier', () => {
       code: 'FIREBASE_ID_TOKEN_INVALID',
     });
   });
+  it('requires Firebase Admin credentials in staging', async () => {
+    await expect(verifyFirebaseIdToken({ ...env, appEnv: 'staging', allowFirebaseRestFallback: false } as ApiEnv, 'token'))
+      .rejects.toMatchObject({ code: 'FIREBASE_ADMIN_NOT_CONFIGURED' });
+  });
+
 });

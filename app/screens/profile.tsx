@@ -5,8 +5,8 @@ import * as Haptics from 'expo-haptics';
 
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
 import { ModalScreen, PageIntro, ScreenScroll, useResponsiveLayout } from '../../src/components/layout';
-import { IconBubble, PressScale, PrimaryAction, SectionHeader, StatusPill, SurfaceCard } from '../../src/components/ui';
-import { useBoxStore, useCycleStore, useUserStore } from '../../src/store';
+import { IconBubble, InlineMessage, PressScale, PrimaryButton, SectionHeader, StatusPill, SurfaceCard, TextButton } from '../../src/components/ui';
+import { useBoxStore, useCycleStore, useNotificationStore, useUserStore } from '../../src/store';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { deleteStoredAvatar, pickAvatar } from '../../src/services/avatar';
 import { LousaPalette } from '../../src/theme/designSystem';
@@ -14,30 +14,31 @@ import { calculateCyclePrediction } from '../../src/services/cyclePrediction';
 import { services } from '../../src/services';
 import { signOutNativeGoogle } from '../../src/services/nativeGoogleSignIn';
 import { clearAllLocalData } from '../../src/services/localData';
+import { beginGuestAccountUpgrade } from '../../src/features/auth/guest/guestSession';
 
 const COPY = {
   ru: {
     appBar: 'Профиль', title: 'Твоё пространство', subtitle: 'Личные данные, цикл, подписка и приватность — в одном месте.',
     edit: 'Изменить имя', save: 'Сохранить', cancel: 'Отмена', namePlaceholder: 'Твоё имя', premium: 'LOUSA Premium', free: 'Базовый профиль',
     cycle: 'Средний цикл', period: 'Средняя менструация', confirmed: 'Подтверждённые циклы', confidence: 'Уверенность прогноза', today: 'Сегодня', days: 'дней', logged: 'Заполнено', notLogged: 'Нет записи', confidenceLabels: { insufficient: 'Недостаточно данных', low: 'Низкая', medium: 'Средняя', high: 'Высокая' },
-    account: 'Аккаунт', deliveryAddress: 'Адрес доставки', noAddress: 'Не выбран', cycleData: 'Данные цикла', reviewImported: 'Проверить перенесённые даты', analytics: 'Аналитика', box: 'LOUSA BOX', settings: 'Настройки', privacy: 'Приватность и защита',
-    activeBox: 'Активна', noBox: 'Не оформлена', editPhoto: 'Изменить фото', removePhoto: 'Удалить фото', close: 'Закрыть', logout: 'Выйти из аккаунта',
+    account: 'Аккаунт', email: 'Email', phone: 'Телефон', languageLabel: 'Язык', notifications: 'Уведомления', notificationsOn: 'Включены', notificationsOff: 'Выключены', notProvided: 'Не указан', deliveryAddress: 'Адрес доставки', noAddress: 'Не выбран', cycleData: 'Данные цикла', reviewImported: 'Проверить перенесённые даты', analytics: 'Аналитика', box: 'LOUSA BOX', settings: 'Настройки', privacy: 'Приватность и защита',
+    activeBox: 'Активна', noBox: 'Не оформлена', editPhoto: 'Изменить фото', removePhoto: 'Удалить фото', close: 'Закрыть', logout: 'Выйти из аккаунта', guest: 'Гостевой режим', guestTitle: 'Вы используете LOUSA без аккаунта', guestBody: 'Цикл, самочувствие и заметки сохраняются локально на этом устройстве. Аккаунт нужен для резервной копии, адреса, LOUSA BOX и оплаты.', createAccount: 'Создать аккаунт', signInAccount: 'Войти в аккаунт', accountRequired: 'Нужен аккаунт', leaveGuest: 'Удалить гостевые данные', leaveGuestTitle: 'Удалить гостевые данные?', leaveGuestText: 'Локальные записи цикла, самочувствия и настройки будут удалены с этого устройства.', leaveGuestConfirm: 'Удалить данные',
     logoutTitle: 'Выйти из аккаунта?', logoutText: 'Данные этого аккаунта будут удалены с устройства. Серверный аккаунт и история останутся сохранены.', logoutConfirm: 'Выйти',
   },
   en: {
     appBar: 'Profile', title: 'Your space', subtitle: 'Personal details, cycle, subscription and privacy in one place.',
     edit: 'Edit name', save: 'Save', cancel: 'Cancel', namePlaceholder: 'Your name', premium: 'LOUSA Premium', free: 'Basic profile',
     cycle: 'Average cycle', period: 'Average period', confirmed: 'Confirmed cycles', confidence: 'Forecast confidence', today: 'Today', days: 'days', logged: 'Logged', notLogged: 'No entry', confidenceLabels: { insufficient: 'Not enough data', low: 'Low', medium: 'Medium', high: 'High' },
-    account: 'Account', deliveryAddress: 'Delivery address', noAddress: 'Not selected', cycleData: 'Cycle data', reviewImported: 'Review imported dates', analytics: 'Analytics', box: 'LOUSA BOX', settings: 'Settings', privacy: 'Privacy & security',
-    activeBox: 'Active', noBox: 'Not subscribed', editPhoto: 'Change photo', removePhoto: 'Remove photo', close: 'Close', logout: 'Sign out',
+    account: 'Account', email: 'Email', phone: 'Phone', languageLabel: 'Language', notifications: 'Notifications', notificationsOn: 'On', notificationsOff: 'Off', notProvided: 'Not provided', deliveryAddress: 'Delivery address', noAddress: 'Not selected', cycleData: 'Cycle data', reviewImported: 'Review imported dates', analytics: 'Analytics', box: 'LOUSA BOX', settings: 'Settings', privacy: 'Privacy & security',
+    activeBox: 'Active', noBox: 'Not subscribed', editPhoto: 'Change photo', removePhoto: 'Remove photo', close: 'Close', logout: 'Sign out', guest: 'Guest mode', guestTitle: 'You are using LOUSA without an account', guestBody: 'Cycle data, wellbeing and notes are stored locally on this device. An account is required for backup, delivery addresses, LOUSA BOX and payments.', createAccount: 'Create account', signInAccount: 'Sign in', accountRequired: 'Account required', leaveGuest: 'Delete guest data', leaveGuestTitle: 'Delete guest data?', leaveGuestText: 'Local cycle records, wellbeing entries and settings will be removed from this device.', leaveGuestConfirm: 'Delete data',
     logoutTitle: 'Sign out?', logoutText: 'This account’s data will be removed from this device. The server account and history will remain saved.', logoutConfirm: 'Sign out',
   },
   hy: {
     appBar: 'Պրոֆիլ', title: 'Քո տարածքը', subtitle: 'Անձնական տվյալները, ցիկլը, բաժանորդագրությունն ու գաղտնիությունը՝ մեկ տեղում։',
     edit: 'Փոխել անունը', save: 'Պահպանել', cancel: 'Չեղարկել', namePlaceholder: 'Քո անունը', premium: 'LOUSA Premium', free: 'Հիմնական պրոֆիլ',
     cycle: 'Միջին ցիկլ', period: 'Միջին դաշտան', confirmed: 'Հաստատված ցիկլեր', confidence: 'Կանխատեսման վստահություն', today: 'Այսօր', days: 'օր', logged: 'Լրացված է', notLogged: 'Գրառում չկա', confidenceLabels: { insufficient: 'Տվյալները քիչ են', low: 'Ցածր', medium: 'Միջին', high: 'Բարձր' },
-    account: 'Հաշիվ', deliveryAddress: 'Առաքման հասցե', noAddress: 'Ընտրված չէ', cycleData: 'Ցիկլի տվյալներ', reviewImported: 'Ստուգել տեղափոխված ամսաթվերը', analytics: 'Վերլուծություն', box: 'LOUSA BOX', settings: 'Կարգավորումներ', privacy: 'Գաղտնիություն և պաշտպանություն',
-    activeBox: 'Ակտիվ է', noBox: 'Չի ձևակերպվել', editPhoto: 'Փոխել լուսանկարը', removePhoto: 'Ջնջել լուսանկարը', close: 'Փակել', logout: 'Դուրս գալ հաշվից',
+    account: 'Հաշիվ', email: 'Email', phone: 'Հեռախոս', languageLabel: 'Լեզու', notifications: 'Ծանուցումներ', notificationsOn: 'Միացված', notificationsOff: 'Անջատված', notProvided: 'Նշված չէ', deliveryAddress: 'Առաքման հասցե', noAddress: 'Ընտրված չէ', cycleData: 'Ցիկլի տվյալներ', reviewImported: 'Ստուգել տեղափոխված ամսաթվերը', analytics: 'Վերլուծություն', box: 'LOUSA BOX', settings: 'Կարգավորումներ', privacy: 'Գաղտնիություն և պաշտպանություն',
+    activeBox: 'Ակտիվ է', noBox: 'Չի ձևակերպվել', editPhoto: 'Փոխել լուսանկարը', removePhoto: 'Ջնջել լուսանկարը', close: 'Փակել', logout: 'Դուրս գալ հաշվից', guest: 'Հյուրի ռեժիմ', guestTitle: 'Դուք օգտագործում եք LOUSA-ն առանց հաշվի', guestBody: 'Ցիկլը, ինքնազգացողությունն ու գրառումները պահվում են տեղային՝ այս սարքում։ Հաշիվ է պետք պահուստավորման, հասցեի, LOUSA BOX-ի և վճարման համար։', createAccount: 'Ստեղծել հաշիվ', signInAccount: 'Մուտք գործել', accountRequired: 'Հաշիվ է անհրաժեշտ', leaveGuest: 'Ջնջել հյուրի տվյալները', leaveGuestTitle: 'Ջնջե՞լ հյուրի տվյալները', leaveGuestText: 'Տեղային ցիկլի գրառումները, ինքնազգացողությունն ու կարգավորումները կհեռացվեն այս սարքից։', leaveGuestConfirm: 'Ջնջել տվյալները',
     logoutTitle: 'Դուրս գա՞լ հաշվից', logoutText: 'Այս հաշվի տվյալները կհեռացվեն սարքից։ Սերվերի հաշիվն ու պատմությունը կմնան պահպանված։', logoutConfirm: 'Դուրս գալ',
   },
 } as const;
@@ -64,10 +65,15 @@ export default function ProfileScreen() {
   const language = useUserStore((s) => s.language);
   const copy = COPY[language] || COPY.ru;
   const name = useUserStore((s) => s.name);
+  const email = useUserStore((s) => s.email);
+  const phone = useUserStore((s) => s.phone);
   const setName = useUserStore((s) => s.setName);
   const avatarUri = useUserStore((s) => s.avatarUri);
   const setAvatar = useUserStore((s) => s.setAvatar);
   const isPremium = useUserStore((s) => s.isPremium);
+  const isGuestMode = useUserStore((s) => s.isGuestMode);
+  const notificationsEnabled = useNotificationStore((s) => s.enabled);
+  const notificationPermission = useNotificationStore((s) => s.permissionStatus);
   const avgCycleLength = useCycleStore((s) => s.avgCycleLength);
   const avgPeriodLength = useCycleStore((s) => s.avgPeriodLength);
   const periodRecords = useCycleStore((s) => s.periodRecords);
@@ -101,18 +107,36 @@ export default function ProfileScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   };
 
-  const logout = () => Alert.alert(copy.logoutTitle, copy.logoutText, [
-    { text: copy.cancel, style: 'cancel' },
-    {
-      text: copy.logoutConfirm,
-      style: 'destructive',
-      onPress: () => {
-        Promise.allSettled([services.auth.signOut(), signOutNativeGoogle()])
-          .then(() => clearAllLocalData())
-          .finally(() => router.replace('/auth/login'));
+  const openAccount = (mode: 'signup' | 'signin') => {
+    beginGuestAccountUpgrade();
+    router.push({ pathname: '/auth/login', params: { mode } });
+  };
+
+  const logout = () => {
+    if (isGuestMode) {
+      Alert.alert(copy.leaveGuestTitle, copy.leaveGuestText, [
+        { text: copy.cancel, style: 'cancel' },
+        {
+          text: copy.leaveGuestConfirm,
+          style: 'destructive',
+          onPress: () => { clearAllLocalData().finally(() => router.replace('/auth/login')); },
+        },
+      ]);
+      return;
+    }
+    Alert.alert(copy.logoutTitle, copy.logoutText, [
+      { text: copy.cancel, style: 'cancel' },
+      {
+        text: copy.logoutConfirm,
+        style: 'destructive',
+        onPress: () => {
+          Promise.allSettled([services.auth.signOut(), signOutNativeGoogle()])
+            .then(() => clearAllLocalData())
+            .finally(() => router.replace('/auth/login'));
+        },
       },
-    },
-  ]);
+    ]);
+  };
 
   return (
     <ModalScreen title={copy.appBar} closeIcon="arrow_back">
@@ -146,15 +170,23 @@ export default function ProfileScreen() {
               </View>
             ) : (
               <View style={styles.nameLine}>
-                <Text numberOfLines={1} style={[styles.name, { color: colors.onBackground }]}>{name || copy.namePlaceholder}</Text>
+                <Text numberOfLines={1} style={[styles.name, { color: colors.onBackground }]}>{name || (isGuestMode ? copy.guest : copy.namePlaceholder)}</Text>
                 <PressScale onPress={() => { setDraftName(name); setEditing(true); }} style={styles.smallEdit} accessibilityLabel={copy.edit}>
                   <MaterialSymbol name="edit" size={17} color={LousaPalette.berry} />
                 </PressScale>
               </View>
             )}
-            <StatusPill label={isPremium ? copy.premium : copy.free} tone={isPremium ? 'rose' : 'neutral'} icon={isPremium ? 'auto_awesome' : 'person'} />
+            <StatusPill label={isGuestMode ? copy.guest : (isPremium ? copy.premium : copy.free)} tone={isGuestMode ? 'warning' : (isPremium ? 'rose' : 'neutral')} icon={isGuestMode ? 'visibility_off' : (isPremium ? 'auto_awesome' : 'person')} />
           </View>
         </SurfaceCard>
+
+        {isGuestMode ? (
+          <View style={styles.guestNotice}>
+            <InlineMessage title={copy.guestTitle} body={copy.guestBody} tone="warning" />
+            <PrimaryButton label={copy.createAccount} icon="lock" onPress={() => openAccount('signup')} />
+            <TextButton label={copy.signInAccount} onPress={() => openAccount('signin')} fullWidth />
+          </View>
+        ) : null}
 
         <View style={[styles.statsGrid, compactWidth && styles.statsGridCompact]}>
           {[
@@ -174,6 +206,16 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <SectionHeader title={copy.account} />
           <SurfaceCard padding={4}>
+            {!isGuestMode ? <>
+              <MenuRow icon="mail" label={copy.email} value={email || copy.notProvided} onPress={() => router.push('/screens/settings')} />
+              <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
+              <MenuRow icon="phone" label={copy.phone} value={phone || copy.notProvided} onPress={() => router.push('/screens/settings')} />
+              <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
+              <MenuRow icon="language" label={copy.languageLabel} value={language.toUpperCase()} onPress={() => router.push('/screens/settings')} />
+              <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
+              <MenuRow icon="notifications" label={copy.notifications} value={notificationsEnabled && notificationPermission === 'granted' ? copy.notificationsOn : copy.notificationsOff} onPress={() => router.push('/screens/notifications')} />
+              <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
+            </> : null}
             <MenuRow icon="calendar_month" label={copy.cycleData} value={`${prediction.completedCyclesCount} · ${copy.confidenceLabels[prediction.confidence]}`} onPress={() => router.push('/(tabs)/cycle')} />
             <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
             {migrationReviewRequired ? <>
@@ -182,7 +224,7 @@ export default function ProfileScreen() {
             </> : null}
             <MenuRow icon="monitoring" label={copy.analytics} onPress={() => router.push('/screens/analytics')} />
             <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
-            <MenuRow icon="location_on" label={copy.deliveryAddress} value={deliveryAddress?.formattedAddress || copy.noAddress} onPress={() => router.push('/screens/address-map')} />
+            <MenuRow icon="location_on" label={copy.deliveryAddress} value={isGuestMode ? copy.accountRequired : (deliveryAddress?.formattedAddress || copy.noAddress)} onPress={() => isGuestMode ? openAccount('signup') : router.push('/screens/address-map')} />
             <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
             <MenuRow icon="inventory_2" label={copy.box} value={isSubscribed ? copy.activeBox : copy.noBox} onPress={() => router.push('/(tabs)/box')} />
             <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
@@ -192,9 +234,9 @@ export default function ProfileScreen() {
           </SurfaceCard>
         </View>
 
-        <PressScale onPress={logout} style={styles.logoutButton} accessibilityLabel={copy.logout}>
+        <PressScale onPress={logout} style={styles.logoutButton} accessibilityLabel={isGuestMode ? copy.leaveGuest : copy.logout}>
           <MaterialSymbol name="logout" size={19} color={LousaPalette.danger} />
-          <Text style={styles.logoutText}>{copy.logout}</Text>
+          <Text style={styles.logoutText}>{isGuestMode ? copy.leaveGuest : copy.logout}</Text>
         </PressScale>
       </ScreenScroll>
 
@@ -203,7 +245,7 @@ export default function ProfileScreen() {
           <PressScale onPress={() => setPhotoActions(false)} style={StyleSheet.absoluteFill} haptic={false}><View style={StyleSheet.absoluteFill} /></PressScale>
           <SurfaceCard padding={20} style={styles.photoSheet}>
             <Text style={[styles.sheetTitle, { color: colors.onBackground }]}>{copy.editPhoto}</Text>
-            <PrimaryAction label={copy.editPhoto} icon="photo_library" onPress={pickImage} />
+            <PrimaryButton label={copy.editPhoto} icon="photo_library" onPress={pickImage} />
             {avatarUri ? (
               <PressScale onPress={() => { deleteStoredAvatar(avatarUri).finally(() => setAvatar(null)); setPhotoActions(false); }} style={styles.sheetSecondary}>
                 <MaterialSymbol name="delete" size={19} color={LousaPalette.danger} />
@@ -234,6 +276,7 @@ const styles = StyleSheet.create({
   nameInput: { flex: 1, height: 48, borderRadius: 15, borderWidth: 1, paddingHorizontal: 14, fontFamily: 'sans-serif-medium', fontSize: 16 },
   inlineIcon: { width: 48, height: 48, borderRadius: 22, backgroundColor: LousaPalette.berry, alignItems: 'center', justifyContent: 'center' },
   demoBadge: { alignSelf: 'flex-start', marginBottom: 12 },
+  guestNotice: { gap: 8, marginTop: 14 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 },
   statsGridCompact: { flexDirection: 'row' },
   statCard: { width: '48%', minHeight: 122 },

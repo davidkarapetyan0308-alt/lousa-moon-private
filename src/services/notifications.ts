@@ -331,7 +331,7 @@ function buildCandidates(): Candidate[] {
         date: adjust(atLocalTime(day, prefs.checkInTime)),
         title: copy.checkInTitle,
         body: copy.checkInBody,
-        screen: '/screens/log-state',
+        screen: '/screens/wellness-log',
         priority: 30,
         sound: prefs.gentleSound,
         channelId: CHANNELS.gentle,

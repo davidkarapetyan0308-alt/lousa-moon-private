@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { encryptedStateStorage } from '../security/encryptedStateStorage';
 
-import { ThemeName } from '../theme/tokens';
+import { ThemeName, normalizeThemeName } from '../theme/tokens';
 import { BoxPlanId } from '../data/boxCatalog';
 import { addLocalDays, toLocalDateString } from '../utils/date';
 import {
@@ -29,14 +29,64 @@ import { migrateCycleStateToV6, confirmLegacyRecord } from '../services/migratio
 import { evaluatePrediction } from '../services/predictionAccuracy';
 import { recommendBox } from '../services/boxRecommendation';
 import { planBoxDelivery } from '../services/deliveryPlanning';
+import type { AuthSessionState } from '../services/contracts';
 import { CycleValidationError, validateAndNormalizePeriodRecord, validateCycleObservationDate, validatePeriodRecordSet } from '../domain/cycleValidation';
 
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const nowIso = () => new Date().toISOString();
 
+
+const USER_LANGUAGES = new Set(['en', 'ru', 'hy']);
+const SESSION_STATES = new Set<AuthSessionState>([
+  'unauthenticated',
+  'firebase_authenticated',
+  'backend_session_pending',
+  'local_limited_mode',
+  'authenticated',
+  'guest',
+  'session_expired',
+  'session_error',
+]);
+
+function normalizePersistedUserState(persisted: any) {
+  const source = persisted && typeof persisted === 'object' ? persisted : {};
+  const avatarUri = typeof source.avatarUri === 'string' ? source.avatarUri : null;
+  const safeAvatarUri = avatarUri && !avatarUri.startsWith('data:') && !avatarUri.startsWith('blob:') ? avatarUri : null;
+  const isGuestMode = Boolean(source.isGuestMode);
+  const sessionState = isGuestMode
+    ? 'guest'
+    : SESSION_STATES.has(source.sessionState as AuthSessionState)
+      ? source.sessionState as AuthSessionState
+      : 'unauthenticated';
+
+  return {
+    ...source,
+    name: typeof source.name === 'string' ? source.name.slice(0, 120) : '',
+    email: typeof source.email === 'string' ? source.email.slice(0, 254) : '',
+    phone: typeof source.phone === 'string' ? source.phone.slice(0, 40) : '',
+    avatarUri: safeAvatarUri,
+    isPremium: Boolean(source.isPremium),
+    theme: normalizeThemeName(source.theme),
+    pinEnabled: Boolean(source.pinEnabled),
+    biometricEnabled: Boolean(source.biometricEnabled),
+    notificationsEnabled: source.notificationsEnabled !== false,
+    isOnboarded: Boolean(source.isOnboarded),
+    language: USER_LANGUAGES.has(source.language) ? source.language : 'ru',
+    isDemoMode: Boolean(source.isDemoMode),
+    isGuestMode,
+    guestAuthFlowActive: false,
+    guestStartedAt: typeof source.guestStartedAt === 'string' ? source.guestStartedAt : null,
+    communicationStyle: source.communicationStyle || 'neutral',
+    sessionState,
+    sessionError: typeof source.sessionError === 'string' ? source.sessionError : null,
+  };
+}
+
 // ========== USER STORE ==========
 interface UserState {
   name: string;
+  email: string;
+  phone: string;
   avatarUri: string | null;
   isPremium: boolean;
   theme: ThemeName;
@@ -46,8 +96,14 @@ interface UserState {
   isOnboarded: boolean;
   language: 'en' | 'ru' | 'hy';
   isDemoMode: boolean;
+  isGuestMode: boolean;
+  guestAuthFlowActive: boolean;
+  guestStartedAt: string | null;
   communicationStyle: CommunicationStyle;
+  sessionState: AuthSessionState;
+  sessionError: string | null;
   setName: (name: string) => void;
+  setContact: (contact: { email?: string; phone?: string }) => void;
   setAvatar: (uri: string | null) => void;
   setPremium: (v: boolean) => void;
   setTheme: (t: ThemeName) => void;
@@ -57,13 +113,18 @@ interface UserState {
   setOnboarded: (v: boolean) => void;
   setLanguage: (lang: 'en' | 'ru' | 'hy') => void;
   setDemoMode: (value: boolean) => void;
+  setGuestMode: (value: boolean) => void;
+  setGuestAuthFlowActive: (value: boolean) => void;
   setCommunicationStyle: (value: CommunicationStyle) => void;
+  setSessionState: (value: AuthSessionState, error?: string | null) => void;
 }
 
 export const useUserStore = create<UserState>()(
   persist(
     (set) => ({
       name: '',
+      email: '',
+      phone: '',
       avatarUri: null,
       isPremium: false,
       theme: 'rose_gold',
@@ -73,8 +134,14 @@ export const useUserStore = create<UserState>()(
       isOnboarded: false,
       language: 'ru',
       isDemoMode: false,
+      isGuestMode: false,
+      guestAuthFlowActive: false,
+      guestStartedAt: null,
       communicationStyle: 'neutral',
+      sessionState: 'unauthenticated',
+      sessionError: null,
       setName: (name) => set({ name }),
+      setContact: (contact) => set((state) => ({ email: contact.email ?? state.email, phone: contact.phone ?? state.phone })),
       setAvatar: (avatarUri) => set({ avatarUri }),
       setPremium: (isPremium) => set({ isPremium }),
       setTheme: (theme) => set({ theme }),
@@ -84,16 +151,21 @@ export const useUserStore = create<UserState>()(
       setOnboarded: (isOnboarded) => set({ isOnboarded }),
       setLanguage: (language) => set({ language }),
       setDemoMode: (isDemoMode) => set({ isDemoMode }),
+      setGuestMode: (isGuestMode) => set({ isGuestMode }),
+      setGuestAuthFlowActive: (guestAuthFlowActive) => set({ guestAuthFlowActive }),
       setCommunicationStyle: (communicationStyle) => set({ communicationStyle }),
+      setSessionState: (sessionState, sessionError = null) => set({ sessionState, sessionError }),
     }),
     {
       name: 'lousa-user',
-      version: 9,
+      version: 12,
       storage: createJSONStorage(() => encryptedStateStorage),
-      migrate: (persisted: any) => {
-        const avatarUri = typeof persisted?.avatarUri === 'string' ? persisted.avatarUri : null;
-        const safeAvatarUri = avatarUri && !avatarUri.startsWith('data:') && !avatarUri.startsWith('blob:') ? avatarUri : null;
-        return { ...persisted, avatarUri: safeAvatarUri, isDemoMode: Boolean(persisted?.isDemoMode), communicationStyle: persisted?.communicationStyle || 'neutral' };
+      migrate: (persisted: any) => normalizePersistedUserState(persisted),
+      // merge runs even when the persisted version already matches. This protects
+      // startup from malformed values written by an interrupted/older build.
+      merge: (persisted: any, current) => ({ ...current, ...normalizePersistedUserState(persisted) }),
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) console.warn('[BOOT] user store hydration failed; using safe in-memory defaults', error);
       },
     }
   )
@@ -884,7 +956,7 @@ export const useWellnessStore = create<WellnessState>()(
     }),
     {
       name: 'lousa-wellness',
-      version: 9,
+      version: 10,
       storage: createJSONStorage(() => encryptedStateStorage),
       migrate: (persisted: any) => {
         const logs = persisted?.dailyLogs || {};
@@ -952,18 +1024,12 @@ interface BoxState {
   subscription: SubscriptionModel | null;
   orders: BoxOrder[];
   feedback: BoxFeedback[];
-  subscribe: (payload: { planId: BoxPlanId; address: string; deliveryAddress?: DeliveryAddress | null; phone: string; deliveryNote?: string; productType?: 'pads' | 'tampons' | 'mixed'; absorbency?: 'regular' | 'super'; fragranceFree?: boolean; dietaryNote?: string; deliveryWindow?: string; nextDeliveryDate?: string }) => void;
-  cancel: () => void;
-  togglePause: () => void;
-  pause: (mode: 'skip_next' | 'until' | 'indefinite', until?: string) => void;
-  resume: () => void;
+  seedDemoSubscription: (payload: { planId: BoxPlanId; address: string; deliveryAddress?: DeliveryAddress | null; phone: string; deliveryNote?: string; productType?: 'pads' | 'tampons' | 'mixed'; absorbency?: 'regular' | 'super'; fragranceFree?: boolean; dietaryNote?: string; deliveryWindow?: string; nextDeliveryDate?: string }) => void;
   syncPauseState: () => void;
-  setStatus: (status: DeliveryStatus) => void;
-  setOrderStatus: (orderId: string, status: BoxOrderStatus, note?: string) => void;
+  setDemoOrderStatus: (orderId: string, status: BoxOrderStatus, note?: string) => void;
   setAddress: (address: string) => void;
   setDeliveryAddress: (address: DeliveryAddress | null) => void;
   updatePreferences: (patch: Partial<BoxPreferences>) => void;
-  createRecommendedOrder: () => void;
   addFeedback: (feedback: Omit<BoxFeedback, 'createdAt'>) => void;
   applyServerSubscription: (subscription: SubscriptionModel | null) => void;
   replaceOrdersFromServer: (orders: BoxOrder[]) => void;
@@ -1008,7 +1074,8 @@ export const useBoxStore = create<BoxState>()(
       subscription: null,
       orders: [],
       feedback: [],
-      subscribe: ({ planId, address, deliveryAddress = null, phone, deliveryNote = '', productType = 'pads', absorbency = 'regular', fragranceFree = true, dietaryNote = '', deliveryWindow = '10:00–14:00', nextDeliveryDate }) => {
+      seedDemoSubscription: ({ planId, address, deliveryAddress = null, phone, deliveryNote = '', productType = 'pads', absorbency = 'regular', fragranceFree = true, dietaryNote = '', deliveryWindow = '10:00–14:00', nextDeliveryDate }) => {
+        if (!useUserStore.getState().isDemoMode) throw new Error('DEMO_SUBSCRIPTION_SEED_FORBIDDEN');
         const now = nowIso();
         const cycle = useCycleStore.getState();
         cycle.ensureLegacyMigration();
@@ -1099,76 +1166,21 @@ export const useBoxStore = create<BoxState>()(
           orders: [order, ...get().orders.filter((item) => item.status !== 'draft')],
         });
       },
-      cancel: () => set((state) => ({
-        isSubscribed: false,
-        status: 'scheduled',
-        paused: false,
-        subscription: state.subscription ? { ...state.subscription, status: 'cancelled', updatedAt: nowIso() } : null,
+      syncPauseState: () => set((state) => ({
+        paused: state.subscription?.status === 'paused',
       })),
-      togglePause: () => get().paused ? get().resume() : get().pause('indefinite'),
-      pause: (mode, until) => set((state) => {
-        const now = nowIso();
-        const orders = state.orders.map((order, index) => {
-          if (index !== 0 || !['draft', 'scheduled', 'customization_open'].includes(order.status)) return order;
-          return {
+      setDemoOrderStatus: (orderId, status, note) => {
+        if (!useUserStore.getState().isDemoMode) throw new Error('DEMO_ORDER_STATUS_FORBIDDEN');
+        set((state) => ({
+          status: state.orders[0]?.id === orderId ? mapOrderStatus(status) : state.status,
+          orders: state.orders.map((order) => order.id === orderId ? {
             ...order,
-            status: 'delayed' as const,
-            updatedAt: now,
-            statusHistory: [...order.statusHistory, { status: 'delayed' as const, at: now, note: `subscription_pause:${mode}` }],
-          };
-        });
-        return {
-          paused: true,
-          status: 'scheduled' as const,
-          orders,
-          subscription: state.subscription ? {
-            ...state.subscription,
-            status: 'paused' as const,
-            skipNextBox: mode === 'skip_next',
-            pauseUntil: mode === 'until' ? until || null : null,
-            updatedAt: now,
-          } : null,
-        };
-      }),
-      resume: () => set((state) => {
-        const now = nowIso();
-        const orders = state.orders.map((order, index) => {
-          if (index !== 0 || order.status !== 'delayed') return order;
-          return {
-            ...order,
-            status: 'scheduled' as const,
-            updatedAt: now,
-            statusHistory: [...order.statusHistory, { status: 'scheduled' as const, at: now, note: 'subscription_resumed' }],
-          };
-        });
-        return {
-          paused: false,
-          orders,
-          subscription: state.subscription ? { ...state.subscription, status: 'active' as const, skipNextBox: false, pauseUntil: null, updatedAt: now } : null,
-        };
-      }),
-      syncPauseState: () => {
-        const state = get();
-        const pauseUntil = state.subscription?.pauseUntil;
-        if (!state.paused || !pauseUntil) return;
-        const today = toLocalDateString();
-        if (pauseUntil <= today) state.resume();
+            status,
+            updatedAt: nowIso(),
+            statusHistory: [...order.statusHistory, { status, at: nowIso(), note }],
+          } : order),
+        }));
       },
-      setStatus: (status) => set((state) => {
-        const current = state.orders[0];
-        const mapped = mapLegacyStatus(status);
-        const orders = current ? [{ ...current, status: mapped, updatedAt: nowIso(), statusHistory: [...current.statusHistory, { status: mapped, at: nowIso() }] }, ...state.orders.slice(1)] : state.orders;
-        return { status, orders };
-      }),
-      setOrderStatus: (orderId, status, note) => set((state) => ({
-        status: state.orders[0]?.id === orderId ? mapOrderStatus(status) : state.status,
-        orders: state.orders.map((order) => order.id === orderId ? {
-          ...order,
-          status,
-          updatedAt: nowIso(),
-          statusHistory: [...order.statusHistory, { status, at: nowIso(), note }],
-        } : order),
-      })),
       setAddress: (address) => set({ address }),
       setDeliveryAddress: (deliveryAddress) => set({
         deliveryAddress,
@@ -1177,35 +1189,6 @@ export const useBoxStore = create<BoxState>()(
         deliveryNote: deliveryAddress?.instructions || get().deliveryNote,
       }),
       updatePreferences: (patch) => set((state) => ({ preferences: { ...state.preferences, ...patch } })),
-      createRecommendedOrder: () => {
-        const state = get();
-        if (!state.subscription) return;
-        const cycle = useCycleStore.getState();
-        const prediction = calculateCyclePrediction(cycle.periodRecords, {
-          fallbackCycleLength: cycle.avgCycleLength,
-          fallbackPeriodLength: cycle.avgPeriodLength,
-          cycleContext: cycle.onboardingProfile.cycleContext,
-          factors: cycle.onboardingProfile.factors,
-        });
-        const plan = planBoxDelivery({ prediction, paused: state.paused, skipNext: state.subscription.skipNextBox });
-        const recommendation = recommendBox({ plan: state.planId as any, preferences: state.preferences, periods: cycle.periodRecords, feedback: state.feedback, language: useUserStore.getState().language });
-        const now = nowIso();
-        const order: BoxOrder = {
-          id: makeId('order'),
-          cyclePredictionSnapshot: prediction,
-          plannedDeliveryDate: plan.targetDate,
-          deliveryRange: { earliest: plan.earliestDate, latest: plan.latestDate },
-          preparationDeadline: plan.preparationDeadline,
-          customizationDeadline: plan.customizationDeadline,
-          status: plan.mode === 'next_cycle' ? 'delayed' : 'scheduled',
-          items: recommendation.items,
-          statusHistory: [{ status: plan.mode === 'next_cycle' ? 'delayed' : 'scheduled', at: now, note: plan.reasons.join(',') }],
-          demo: false,
-          createdAt: now,
-          updatedAt: now,
-        };
-        set({ orders: [order, ...state.orders], nextDeliveryDate: order.plannedDeliveryDate || state.nextDeliveryDate });
-      },
       addFeedback: (feedback) => set((state) => ({ feedback: [{ ...feedback, createdAt: nowIso() }, ...state.feedback] })),
       applyServerSubscription: (subscription) => set((state) => ({
         subscription,
@@ -1219,7 +1202,7 @@ export const useBoxStore = create<BoxState>()(
     }),
     {
       name: 'lousa-box',
-      version: 9,
+      version: 10,
       storage: createJSONStorage(() => encryptedStateStorage),
       migrate: (persisted: any) => ({
         ...persisted,
@@ -1337,7 +1320,7 @@ export function seedDemoData() {
     periodLengthKnown: true,
     completedAt: nowIso(),
   });
-  useUserStore.setState({ name: 'Ани', isPremium: true, isOnboarded: true, isDemoMode: true, communicationStyle: 'warm' });
+  useUserStore.setState({ name: 'Ани', isPremium: true, isOnboarded: true, isDemoMode: true, isGuestMode: false, guestAuthFlowActive: false, guestStartedAt: null, communicationStyle: 'warm' });
 
   const dailyLogs: Record<string, DailyLog> = {};
   for (let offset = 0; offset < 14; offset += 1) {
@@ -1365,7 +1348,7 @@ export function seedDemoData() {
     fragranceFree: true,
     heatPadPreference: 'include',
   });
-  useBoxStore.getState().subscribe({
+  useBoxStore.getState().seedDemoSubscription({
     planId: 'comfort',
     address: 'Гюмри, ул. Абовяна, 12',
     phone: '+374 99 000000',
@@ -1377,7 +1360,7 @@ export function seedDemoData() {
     deliveryWindow: '10:00–14:00',
   });
   const currentOrder = useBoxStore.getState().orders[0];
-  if (currentOrder) useBoxStore.getState().setOrderStatus(currentOrder.id, 'out_for_delivery', 'demo_courier_en_route');
+  if (currentOrder) useBoxStore.getState().setDemoOrderStatus(currentOrder.id, 'out_for_delivery', 'demo_courier_en_route');
 
   useNotificationStore.setState({
     inbox: [

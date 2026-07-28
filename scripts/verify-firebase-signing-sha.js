@@ -61,16 +61,18 @@ if (variant === 'release') {
   storePass = values.storePassword;
   keyPass = values.keyPassword;
 } else {
-  keystore = process.env.ANDROID_DEBUG_KEYSTORE || path.join(os.homedir(), '.android', 'debug.keystore');
-  alias = 'androiddebugkey';
-  storePass = 'android';
-  keyPass = 'android';
+  keystore = variant === 'qa'
+    ? (process.env.LOUSA_QA_KEYSTORE_PATH || process.env.ANDROID_DEBUG_KEYSTORE || path.join(os.homedir(), '.android', 'debug.keystore'))
+    : (process.env.ANDROID_DEBUG_KEYSTORE || path.join(os.homedir(), '.android', 'debug.keystore'));
+  alias = variant === 'qa' ? (process.env.LOUSA_QA_KEY_ALIAS || 'androiddebugkey') : 'androiddebugkey';
+  storePass = variant === 'qa' ? (process.env.LOUSA_QA_KEYSTORE_PASSWORD || 'android') : 'android';
+  keyPass = variant === 'qa' ? (process.env.LOUSA_QA_KEY_PASSWORD || process.env.LOUSA_QA_KEYSTORE_PASSWORD || 'android') : 'android';
 }
 if (!fs.existsSync(keystore)) {
   stop(`Signing keystore is missing: ${keystore}`, [
     variant === 'release'
       ? 'Provide the private release keystore.'
-      : 'Run bash scripts/ensure-standard-debug-keystore.sh, then add its SHA-1 and SHA-256 to Firebase.',
+      : 'Provide the stable QA keystore and register its SHA-1/SHA-256 in Firebase. Do not generate a new key per build machine.',
   ]);
 }
 

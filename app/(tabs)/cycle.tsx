@@ -16,12 +16,19 @@ import { router } from 'expo-router';
 import { MaterialSymbol } from '../../src/components/MaterialSymbol';
 import { ScreenScroll, TabbedScreen, useResponsiveLayout } from '../../src/components/layout';
 import {
+  ChoiceChip,
+  DestructiveButton,
+  HeroCard,
   IconBubble,
+  IconButton,
+  InlineMessage,
   PressScale,
-  PrimaryAction,
+  PrimaryButton,
+  SecondaryButton,
   SectionHeader,
+  SectionSurface,
   StatusPill,
-  SurfaceCard,
+  TextButton,
 } from '../../src/components/ui';
 import {
   useCycleStore,
@@ -48,9 +55,9 @@ const LABELS = {
     period: 'Подтверждено', predictedPeriod: 'Прогноз', fertile: 'Фертильное окно', ovulation: 'Предполагаемая овуляция', predicted: 'Прогноз', range: 'Ожидаемый диапазон',
     selected: 'День в календаре', cycleDay: 'день цикла', moon: 'Луна', advice: 'Подсказка на день',
     checkIn: 'Самочувствие', mood: 'Настроение', symptoms: 'Симптомы', note: 'Личная заметка', notePlaceholder: 'Что важно запомнить об этом дне?',
-    save: 'Сохранить запись', saved: 'Запись сохранена', markPeriod: 'Отметить начало', marked: 'Начало менструации отмечено', endPeriod: 'Закончить менструацию', periodEnded: 'Окончание отмечено', removePeriod: 'Удалить запись периода', removeTitle: 'Удалить период?', removeText: 'Подтверждённая запись и её интенсивность будут удалены.', cancel: 'Отмена', removeConfirm: 'Удалить',
-    medical: 'Это календарная оценка, не медицинское подтверждение. Не используйте её как метод контрацепции.', reviewLegacy: 'Проверить перенесённые даты', addPeriod: 'Отметить начало', high: 'Высокая точность', medium: 'Средняя точность', preliminary: 'Предварительный прогноз',
-    editDay: 'Изменить запись дня', whatHappened: 'Что произошло в этот день?', periodStart: 'Начались месячные', periodDay: 'Это день месячных', periodEnd: 'Месячные закончились', spotting: 'Небольшие выделения', noBleeding: 'Кровотечения не было', deleteDay: 'Удалить запись', undo: 'Отменить последнее изменение', forecastPassed: 'Прогнозируемое окно прошло', forecastPassedBody: 'Если месячные ещё не начались, ничего подтверждать не нужно. Отметьте это — LOUSA снизит уверенность и пересчитает диапазон.', howRead: 'Как читать календарь', factVsForecast: 'Сплошная розовая метка — ваша подтверждённая запись. Пунктир — только прогноз, он не запускает цикл автоматически.', confirmedByYou: 'Подтверждено вами', forecastOnly: 'Только прогноз', noFact: 'Нет подтверждённой записи', calendarEstimate: 'Фаза рассчитана по календарю и может измениться после новой записи.', syncPending: 'Сохранено на телефоне. Синхронизация с аккаунтом продолжится при доступном сервере.', deleteImpactTitle: 'Проверить удаление', deleteImpactOne: 'Будет удалена запись только за этот день. Прогноз обновится.', deleteImpactPeriod: (days: number) => `Эта дата относится к подтверждённому периоду из ${days} дн. Изменение может повлиять на связанные дни и прогноз.`,
+    save: 'Сохранить запись', saved: 'Запись сохранена', markPeriod: 'Добавить дату', marked: 'Первый день цикла сохранён', endPeriod: 'Отметить последний день', periodEnded: 'Последний день сохранён', removePeriod: 'Удалить запись', removeTitle: 'Удалить период?', removeText: 'Запись будет удалена, а прогноз и напоминания обновятся.', cancel: 'Отмена', removeConfirm: 'Удалить',
+    medical: 'Это календарная оценка, не медицинское подтверждение. Не используйте её как метод контрацепции.', reviewLegacy: 'Проверить перенесённые даты', addPeriod: 'Добавить дату', high: 'Высокая точность', medium: 'Средняя точность', preliminary: 'Предварительный прогноз',
+    editDay: 'Изменить запись дня', whatHappened: 'Что произошло в этот день?', periodStart: 'Первый день цикла', periodDay: 'Цикл ещё продолжается', periodEnd: 'Последний день', spotting: 'Небольшие выделения', noBleeding: 'Кровотечения не было', deleteDay: 'Удалить запись', undo: 'Отменить последнее изменение', forecastPassed: 'Прогнозируемое окно прошло', forecastPassedBody: 'Если месячные ещё не начались, ничего подтверждать не нужно. Отметьте это — LOUSA снизит уверенность и пересчитает диапазон.', howRead: 'Как читать календарь', factVsForecast: 'Сплошная розовая метка — ваша подтверждённая запись. Пунктир — только прогноз, он не запускает цикл автоматически.', confirmedByYou: 'Подтверждено вами', forecastOnly: 'Только прогноз', noFact: 'Нет подтверждённой записи', calendarEstimate: 'Фаза рассчитана по календарю и может измениться после новой записи.', syncPending: 'Сохранено на телефоне. Синхронизация с аккаунтом продолжится при доступном сервере.', deleteImpactTitle: 'Проверить удаление', deleteImpactOne: 'Будет удалена запись только за этот день. Прогноз обновится.', deleteImpactPeriod: (days: number) => `Эта дата относится к подтверждённому периоду из ${days} дн. Изменение может повлиять на связанные дни и прогноз.`,
     positionUnknown: 'Фаза этого дня не подтверждена', positionUnknownBody: 'LOUSA не повторяет цикл по кругу без новой даты начала. Отметьте факт или оставьте день без записи.',
     phases: { menstrual: 'Менструальная фаза', follicular: 'Фолликулярное окно', ovulation: 'Овуляция', luteal: 'Лютеиновая фаза' },
   },
@@ -60,9 +67,9 @@ const LABELS = {
     period: 'Confirmed', predictedPeriod: 'Prediction', fertile: 'Fertile window', ovulation: 'Estimated ovulation', predicted: 'Prediction', range: 'Expected range',
     selected: 'Selected day', cycleDay: 'cycle day', moon: 'Moon', advice: 'Guidance for this day',
     checkIn: 'How you feel', mood: 'Mood', symptoms: 'Symptoms', note: 'Personal note', notePlaceholder: 'What would you like to remember about this day?',
-    save: 'Save check-in', saved: 'Check-in saved', markPeriod: 'Mark period start', marked: 'Period start marked', endPeriod: 'Mark period end', periodEnded: 'Period end saved', removePeriod: 'Delete period record', removeTitle: 'Delete this period?', removeText: 'The confirmed record and flow data will be removed.', cancel: 'Cancel', removeConfirm: 'Delete',
-    medical: 'This forecast is approximate and is not suitable for diagnosis or contraception.', reviewLegacy: 'Review imported dates', addPeriod: 'Mark start', high: 'High confidence', medium: 'Medium confidence', preliminary: 'Early prediction',
-    editDay: 'Edit day record', whatHappened: 'What happened on this day?', periodStart: 'Period started', periodDay: 'This was a period day', periodEnd: 'Period ended', spotting: 'Light spotting', noBleeding: 'No bleeding', deleteDay: 'Delete record', undo: 'Undo last change', forecastPassed: 'The predicted window has passed', forecastPassedBody: 'If your period has not started, you do not need to confirm anything. Record it and LOUSA will lower confidence and recalculate the range.', howRead: 'How to read the calendar', factVsForecast: 'Solid rose marks are your confirmed records. Dashed marks are predictions only and never start a cycle automatically.', confirmedByYou: 'Confirmed by you', forecastOnly: 'Prediction only', noFact: 'No confirmed record', calendarEstimate: 'This phase is a calendar estimate and may change after a new record.', syncPending: 'Saved on this phone. Account sync will continue when the server is available.', deleteImpactTitle: 'Review deletion', deleteImpactOne: 'Only this day record will be removed. The forecast will update.', deleteImpactPeriod: (days: number) => `This date belongs to a confirmed ${days}-day period. The change may affect linked days and the forecast.`,
+    save: 'Save check-in', saved: 'Check-in saved', markPeriod: 'Add date', marked: 'Period start marked', endPeriod: 'Mark last day', periodEnded: 'Period end saved', removePeriod: 'Delete period record', removeTitle: 'Delete this period?', removeText: 'The confirmed record and flow data will be removed.', cancel: 'Cancel', removeConfirm: 'Delete',
+    medical: 'This forecast is approximate and is not suitable for diagnosis or contraception.', reviewLegacy: 'Review imported dates', addPeriod: 'Add date', high: 'High confidence', medium: 'Medium confidence', preliminary: 'Early prediction',
+    editDay: 'Edit day record', whatHappened: 'What happened on this day?', periodStart: 'First cycle day', periodDay: 'Cycle is still ongoing', periodEnd: 'Last day', spotting: 'Light spotting', noBleeding: 'No bleeding', deleteDay: 'Delete record', undo: 'Undo last change', forecastPassed: 'The predicted window has passed', forecastPassedBody: 'If your period has not started, you do not need to confirm anything. Record it and LOUSA will lower confidence and recalculate the range.', howRead: 'How to read the calendar', factVsForecast: 'Solid rose marks are your confirmed records. Dashed marks are predictions only and never start a cycle automatically.', confirmedByYou: 'Confirmed by you', forecastOnly: 'Prediction only', noFact: 'No confirmed record', calendarEstimate: 'This phase is a calendar estimate and may change after a new record.', syncPending: 'Saved on this phone. Account sync will continue when the server is available.', deleteImpactTitle: 'Review deletion', deleteImpactOne: 'Only this day record will be removed. The forecast will update.', deleteImpactPeriod: (days: number) => `This date belongs to a confirmed ${days}-day period. The change may affect linked days and the forecast.`,
     positionUnknown: 'The phase for this day is not confirmed', positionUnknownBody: 'LOUSA does not repeat cycles automatically without a new confirmed start. Record what happened or leave the day unmarked.',
     phases: { menstrual: 'Menstrual phase', follicular: 'Follicular phase', ovulation: 'Ovulation', luteal: 'Luteal phase' },
   },
@@ -72,9 +79,9 @@ const LABELS = {
     period: 'Հաստատված', predictedPeriod: 'Կանխատեսում', fertile: 'Բեղմնավոր շրջան', ovulation: 'Ենթադրվող օվուլյացիա', predicted: 'Կանխատեսում', range: 'Սպասվող միջակայք',
     selected: 'Ընտրված օրը', cycleDay: 'ցիկլի օր', moon: 'Լուսին', advice: 'Օրվա հուշում',
     checkIn: 'Ինքնազգացողություն', mood: 'Տրամադրություն', symptoms: 'Ախտանիշներ', note: 'Անձնական նշում', notePlaceholder: 'Ի՞նչն է կարևոր հիշել այս օրվա մասին։',
-    save: 'Պահպանել գրառումը', saved: 'Գրառումը պահպանվեց', markPeriod: 'Նշել դաշտանի սկիզբը', marked: 'Դաշտանի սկիզբը նշվեց', endPeriod: 'Նշել դաշտանի ավարտը', periodEnded: 'Ավարտը պահպանվեց', removePeriod: 'Ջնջել դաշտանի գրառումը', removeTitle: 'Ջնջե՞լ գրառումը', removeText: 'Հաստատված գրառումն ու ինտենսիվությունը կհեռացվեն։', cancel: 'Չեղարկել', removeConfirm: 'Ջնջել',
-    medical: 'Կանխատեսումը մոտավոր է և նախատեսված չէ ախտորոշման կամ հակաբեղմնավորման համար։', reviewLegacy: 'Ստուգել տեղափոխված ամսաթվերը', addPeriod: 'Ավելացնել դաշտան', high: 'Բարձր ճշտություն', medium: 'Միջին ճշտություն', preliminary: 'Նախնական կանխատեսում',
-    editDay: 'Փոխել օրվա գրառումը', whatHappened: 'Ի՞նչ է տեղի ունեցել այս օրը։', periodStart: 'Դաշտանը սկսվել է', periodDay: 'Դաշտանի օր է', periodEnd: 'Դաշտանն ավարտվել է', spotting: 'Թեթև արտադրություն', noBleeding: 'Արյունահոսություն չի եղել', deleteDay: 'Ջնջել գրառումը', undo: 'Չեղարկել վերջին փոփոխությունը', forecastPassed: 'Կանխատեսված շրջանն անցել է', forecastPassedBody: 'Եթե դաշտանը դեռ չի սկսվել, հաստատել ոչինչ պետք չէ։ Նշեք դա, և LOUSA-ն կվերահաշվարկի միջակայքը։', howRead: 'Ինչպես կարդալ օրացույցը', factVsForecast: 'Լցված վարդագույն նշումը ձեր հաստատված գրառումն է, կետագիծը՝ միայն կանխատեսում։ Այն ինքնուրույն չի սկսում ցիկլը։', confirmedByYou: 'Հաստատված է քո կողմից', forecastOnly: 'Միայն կանխատեսում', noFact: 'Հաստատված գրառում չկա', calendarEstimate: 'Փուլը օրացուցային գնահատում է և կարող է փոխվել նոր գրառումից հետո։', syncPending: 'Պահպանված է հեռախոսում։ Հաշվի համաժամացումը կշարունակվի սերվերի հասանելիության դեպքում։', deleteImpactTitle: 'Ստուգել ջնջումը', deleteImpactOne: 'Կջնջվի միայն այս օրվա գրառումը։ Կանխատեսումը կթարմացվի։', deleteImpactPeriod: (days: number) => `Այս ամսաթիվը ${days}-օրյա հաստատված շրջանի մաս է։ Փոփոխությունը կարող է ազդել կապված օրերի և կանխատեսման վրա։`,
+    save: 'Պահպանել գրառումը', saved: 'Գրառումը պահպանվեց', markPeriod: 'Ավելացնել ամսաթիվ', marked: 'Դաշտանի սկիզբը նշվեց', endPeriod: 'Նշել վերջին օրը', periodEnded: 'Ավարտը պահպանվեց', removePeriod: 'Ջնջել դաշտանի գրառումը', removeTitle: 'Ջնջե՞լ գրառումը', removeText: 'Հաստատված գրառումն ու ինտենսիվությունը կհեռացվեն։', cancel: 'Չեղարկել', removeConfirm: 'Ջնջել',
+    medical: 'Կանխատեսումը մոտավոր է և նախատեսված չէ ախտորոշման կամ հակաբեղմնավորման համար։', reviewLegacy: 'Ստուգել տեղափոխված ամսաթվերը', addPeriod: 'Ավելացնել ամսաթիվ', high: 'Բարձր ճշտություն', medium: 'Միջին ճշտություն', preliminary: 'Նախնական կանխատեսում',
+    editDay: 'Փոխել օրվա գրառումը', whatHappened: 'Ի՞նչ է տեղի ունեցել այս օրը։', periodStart: 'Ցիկլի առաջին օրը', periodDay: 'Ցիկլը դեռ շարունակվում է', periodEnd: 'Վերջին օրը', spotting: 'Թեթև արտադրություն', noBleeding: 'Արյունահոսություն չի եղել', deleteDay: 'Ջնջել գրառումը', undo: 'Չեղարկել վերջին փոփոխությունը', forecastPassed: 'Կանխատեսված շրջանն անցել է', forecastPassedBody: 'Եթե դաշտանը դեռ չի սկսվել, հաստատել ոչինչ պետք չէ։ Նշեք դա, և LOUSA-ն կվերահաշվարկի միջակայքը։', howRead: 'Ինչպես կարդալ օրացույցը', factVsForecast: 'Լցված վարդագույն նշումը ձեր հաստատված գրառումն է, կետագիծը՝ միայն կանխատեսում։ Այն ինքնուրույն չի սկսում ցիկլը։', confirmedByYou: 'Հաստատված է քո կողմից', forecastOnly: 'Միայն կանխատեսում', noFact: 'Հաստատված գրառում չկա', calendarEstimate: 'Փուլը օրացուցային գնահատում է և կարող է փոխվել նոր գրառումից հետո։', syncPending: 'Պահպանված է հեռախոսում։ Հաշվի համաժամացումը կշարունակվի սերվերի հասանելիության դեպքում։', deleteImpactTitle: 'Ստուգել ջնջումը', deleteImpactOne: 'Կջնջվի միայն այս օրվա գրառումը։ Կանխատեսումը կթարմացվի։', deleteImpactPeriod: (days: number) => `Այս ամսաթիվը ${days}-օրյա հաստատված շրջանի մաս է։ Փոփոխությունը կարող է ազդել կապված օրերի և կանխատեսման վրա։`,
     positionUnknown: 'Այս օրվա փուլը հաստատված չէ', positionUnknownBody: 'LOUSA-ն առանց նոր հաստատված սկզբի ցիկլը չի կրկնում։ Նշեք փաստը կամ օրը թողեք առանց գրառման։',
     phases: { menstrual: 'Դաշտանային փուլ', follicular: 'Ֆոլիկուլային փուլ', ovulation: 'Օվուլյացիա', luteal: 'Լյուտեինային փուլ' },
   },
@@ -83,6 +90,7 @@ const LABELS = {
 export default function CycleScreen() {
   const { colors, isDark } = useTheme();
   const language = useUserStore((s) => s.language);
+  const isGuestMode = useUserStore((s) => s.isGuestMode);
   const labels = LABELS[language] || LABELS.ru;
   const moodLabels = MOOD_LABELS[language];
   const symptomLabels = SYMPTOM_LABELS[language];
@@ -184,7 +192,7 @@ export default function CycleScreen() {
   };
 
   const syncCycleOperations = (operations: CycleSyncOperation[]) => {
-    if (getServiceMode() !== 'api' || !operations.length) return;
+    if (isGuestMode || getServiceMode() !== 'api' || !operations.length) return;
     void enqueueCycleSync(operations)
       .then(() => flushCycleSyncQueue())
       .then((result) => { if (result.failed) showToast(labels.syncPending); })
@@ -192,9 +200,9 @@ export default function CycleScreen() {
   };
 
   useEffect(() => {
-    if (getServiceMode() !== 'api') return;
+    if (isGuestMode || getServiceMode() !== 'api') return;
     void flushCycleSyncQueue().catch(() => null);
-  }, []);
+  }, [isGuestMode]);
 
   const snapshotCycleState = () => {
     const state = useCycleStore.getState();
@@ -274,34 +282,32 @@ export default function CycleScreen() {
         </Animated.View>
 
         <View style={styles.quickActions}>
-          <PressScale
+          <PrimaryButton
+            label={labels.addPeriod}
+            icon="add"
+            iconPlacement="left"
+            compact
+            fullWidth={false}
             onPress={() => router.push({ pathname: '/screens/period-editor', params: { date: selectedDateString } })}
-            style={[styles.quickAction, { backgroundColor: isDark ? 'rgba(166,77,114,0.18)' : '#F8E7ED', borderColor: isDark ? 'rgba(217,133,165,0.30)' : LousaPalette.rose }]}
-          >
-            <MaterialSymbol name="add" size={19} color={isDark ? '#F1B7CD' : LousaPalette.berry} />
-            <Text style={[styles.quickActionText, { color: isDark ? '#F1B7CD' : LousaPalette.berry }]}>{labels.addPeriod}</Text>
-          </PressScale>
+          />
           {cycleStore.migrationReviewRequired ? (
-            <PressScale
+            <SecondaryButton
+              label={labels.reviewLegacy}
+              icon="priority_high"
+              iconPlacement="left"
+              compact
+              fullWidth={false}
               onPress={() => router.push('/screens/period-review')}
-              style={[styles.quickAction, { backgroundColor: isDark ? 'rgba(184,135,71,0.16)' : LousaPalette.warningSoft, borderColor: isDark ? 'rgba(224,183,127,0.30)' : '#D9B88B' }]}
-            >
-              <MaterialSymbol name="priority_high" size={18} color={LousaPalette.warning} />
-              <Text style={[styles.quickActionText, { color: LousaPalette.warning }]}>{labels.reviewLegacy}</Text>
-            </PressScale>
+            />
           ) : null}
         </View>
 
         <Animated.View entering={FadeInDown.duration(240).delay(30).reduceMotion(ReduceMotion.System)} style={styles.section}>
-          <SurfaceCard padding={18}>
+          <SectionSurface>
             <View style={styles.calendarHeader}>
-              <PressScale onPress={() => changeMonth(-1)} style={styles.monthArrow}>
-                <MaterialSymbol name="chevron_left" size={23} color={colors.onSurfaceVariant} />
-              </PressScale>
+              <IconButton icon="chevron_left" label={language === 'en' ? 'Previous month' : language === 'hy' ? 'Նախորդ ամիս' : 'Предыдущий месяц'} onPress={() => changeMonth(-1)} />
               <Text style={[styles.monthTitle, { color: colors.onBackground }]}>{monthCursor.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}</Text>
-              <PressScale onPress={() => changeMonth(1)} style={styles.monthArrow}>
-                <MaterialSymbol name="chevron_right" size={23} color={colors.onSurfaceVariant} />
-              </PressScale>
+              <IconButton icon="chevron_right" label={language === 'en' ? 'Next month' : language === 'hy' ? 'Հաջորդ ամիս' : 'Следующий месяц'} onPress={() => changeMonth(1)} />
             </View>
 
             <View style={styles.weekRow}>
@@ -366,33 +372,25 @@ export default function CycleScreen() {
                 </Text>
               )}
             </View>
-          </SurfaceCard>
+          </SectionSurface>
         </Animated.View>
 
-        <SurfaceCard padding={17} tone="flat" style={styles.explainerCard}>
-          <View style={styles.explainerRow}>
-            <MaterialSymbol name="verified_user" size={20} color={LousaPalette.berry} />
-            <View style={styles.flexOne}>
-              <Text style={[styles.explainerTitle, { color: colors.onBackground }]}>{labels.howRead}</Text>
-              <Text style={[styles.explainerBody, { color: colors.onSurfaceVariant }]}>{labels.factVsForecast}</Text>
-            </View>
-          </View>
-        </SurfaceCard>
+        <InlineMessage title={labels.howRead} body={labels.factVsForecast} />
 
         {prediction.expectedWindowPassed ? (
-          <SurfaceCard padding={18} tone="accent" style={styles.windowPassedCard}>
+          <HeroCard tone="neutral" style={styles.windowPassedCard}>
             <Text style={[styles.explainerTitle, { color: colors.onBackground }]}>{labels.forecastPassed}</Text>
             <Text style={[styles.explainerBody, { color: colors.onSurfaceVariant }]}>{labels.forecastPassedBody}</Text>
             <View style={styles.windowActions}>
-              <PressScale onPress={() => applyCycleObservation('period_start')} style={styles.windowPrimary}><Text style={styles.windowPrimaryText}>{labels.periodStart}</Text></PressScale>
-              <PressScale onPress={() => applyCycleObservation('no_bleeding')} style={[styles.windowSecondary, { borderColor: colors.outlineVariant }]}><Text style={[styles.windowSecondaryText, { color: colors.onBackground }]}>{labels.noBleeding}</Text></PressScale>
+              <PrimaryButton label={labels.periodStart} onPress={() => applyCycleObservation('period_start')} />
+              <SecondaryButton label={labels.noBleeding} onPress={() => applyCycleObservation('no_bleeding')} />
             </View>
-          </SurfaceCard>
+          </HeroCard>
         ) : null}
 
         <Animated.View entering={FadeInDown.duration(220).delay(60).reduceMotion(ReduceMotion.System)} style={styles.section}>
           <SectionHeader title={labels.selected} eyebrow={selectedDate.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })} />
-          <SurfaceCard padding={20} tone="accent">
+          <HeroCard tone="rose">
             {hasCycleData && cycleData.isCyclePositionKnown ? (
               <View style={styles.selectedTop}>
                 <View style={styles.selectedDayBlock}>
@@ -420,10 +418,9 @@ export default function CycleScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.phaseTitle, { color: colors.onBackground }]}>{labels.positionUnknown}</Text>
                   <Text style={[styles.rangeText, { color: colors.onSurfaceVariant }]}>{labels.positionUnknownBody}</Text>
-                  <PressScale onPress={() => setActionSheetOpen(true)} style={styles.emptyCycleAction}>
-                    <Text style={styles.emptyCycleActionText}>{labels.editDay}</Text>
-                    <MaterialSymbol name="arrow_forward" size={16} color={LousaPalette.berry} />
-                  </PressScale>
+                  <View style={styles.inlineButtonWrap}>
+                    <PrimaryButton label={labels.editDay} compact fullWidth={false} onPress={() => setActionSheetOpen(true)} />
+                  </View>
                 </View>
               </View>
             ) : (
@@ -440,10 +437,9 @@ export default function CycleScreen() {
                         ? 'Նշեք վերջին դաշտանի սկիզբը, որպեսզի LOUSA-ն կազմի առաջին զգուշավոր կանխատեսումը։'
                         : 'Отметьте дату начала последней менструации, чтобы LOUSA смогла построить первый осторожный прогноз.'}
                   </Text>
-                  <PressScale onPress={() => router.push({ pathname: '/screens/period-editor', params: { date: selectedDateString } })} style={styles.emptyCycleAction}>
-                    <Text style={styles.emptyCycleActionText}>{labels.addPeriod}</Text>
-                    <MaterialSymbol name="arrow_forward" size={16} color={LousaPalette.berry} />
-                  </PressScale>
+                  <View style={styles.inlineButtonWrap}>
+                    <PrimaryButton label={labels.addPeriod} compact fullWidth={false} onPress={() => router.push({ pathname: '/screens/period-editor', params: { date: selectedDateString } })} />
+                  </View>
                 </View>
               </View>
             )}
@@ -451,41 +447,29 @@ export default function CycleScreen() {
               <MaterialSymbol name="info" size={16} color={colors.onSurfaceVariant} />
               <Text style={[styles.medicalText, { color: colors.onSurfaceVariant }]}>{labels.medical}</Text>
             </View>
-          </SurfaceCard>
+          </HeroCard>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(220).delay(90).reduceMotion(ReduceMotion.System)} style={styles.section}>
-          <SectionHeader title={labels.advice} />
-          <SurfaceCard padding={20}>
-            <View style={styles.adviceRow}>
-              <IconBubble icon="spa" tone="rose" />
-              <Text style={[styles.adviceText, { color: colors.onBackground }]}>{tip}</Text>
-            </View>
-          </SurfaceCard>
+          <InlineMessage title={labels.advice} body={tip} />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(220).delay(110).reduceMotion(ReduceMotion.System)} style={styles.section}>
           <SectionHeader title={labels.checkIn} />
-          <SurfaceCard padding={20}>
+          <SectionSurface>
             <Text style={[styles.fieldTitle, { color: colors.onBackground }]}>{labels.mood}</Text>
             <View style={styles.moodGrid}>
               {MOODS.map((mood) => {
                 const selected = currentLog.mood === mood.id;
                 return (
-                  <PressScale
+                  <ChoiceChip
                     key={mood.id}
+                    label={moodLabels[mood.id]}
+                    icon={mood.icon}
+                    selected={selected}
                     onPress={() => wellness.setMood(selectedDateString, mood.id)}
-                    style={[
-                      styles.moodCard,
-                      {
-                        backgroundColor: selected ? (isDark ? 'rgba(217,133,165,0.20)' : '#F8E7ED') : (isDark ? 'rgba(255,255,255,0.04)' : '#FCF8FA'),
-                        borderColor: selected ? (isDark ? '#E5A9C0' : LousaPalette.rose) : (isDark ? 'rgba(255,255,255,0.08)' : LousaPalette.line),
-                      },
-                    ]}
-                  >
-                    <MaterialSymbol name={mood.icon} size={22} color={selected ? (isDark ? '#F1B7CD' : LousaPalette.berry) : colors.onSurfaceVariant} />
-                    <Text numberOfLines={2} style={[styles.moodText, { color: selected ? (isDark ? '#F1D9E2' : LousaPalette.berry) : colors.onSurfaceVariant }]}>{moodLabels[mood.id]}</Text>
-                  </PressScale>
+                    style={styles.moodChoice}
+                  />
                 );
               })}
             </View>
@@ -495,20 +479,13 @@ export default function CycleScreen() {
               {SYMPTOMS.map((symptom) => {
                 const selected = currentLog.symptoms.includes(symptom.id);
                 return (
-                  <PressScale
+                  <ChoiceChip
                     key={symptom.id}
+                    label={symptomLabels[symptom.id]}
+                    icon={symptom.icon}
+                    selected={selected}
                     onPress={() => wellness.toggleSymptom(selectedDateString, symptom.id)}
-                    style={[
-                      styles.symptomChip,
-                      {
-                        backgroundColor: selected ? (isDark ? 'rgba(184,166,217,0.17)' : '#F0ECF8') : 'transparent',
-                        borderColor: selected ? (isDark ? '#C9B8E3' : '#A993C8') : (isDark ? 'rgba(255,255,255,0.09)' : LousaPalette.line),
-                      },
-                    ]}
-                  >
-                    <MaterialSymbol name={symptom.icon} size={17} color={selected ? (isDark ? '#D7C9EB' : '#7A62A5') : colors.onSurfaceVariant} />
-                    <Text style={[styles.symptomText, { color: selected ? (isDark ? '#E7DFF3' : '#6F5898') : colors.onSurfaceVariant }]}>{symptomLabels[symptom.id]}</Text>
-                  </PressScale>
+                  />
                 );
               })}
             </View>
@@ -529,20 +506,12 @@ export default function CycleScreen() {
                 },
               ]}
             />
-          </SurfaceCard>
+          </SectionSurface>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(220).delay(120).reduceMotion(ReduceMotion.System)} style={styles.actionsSection}>
-          <PressScale onPress={() => setActionSheetOpen(true)} style={[styles.periodButton, { borderColor: isDark ? 'rgba(255,255,255,0.11)' : LousaPalette.line }]}>
-            <MaterialSymbol name="edit_calendar" size={18} color={isDark ? '#F0B0C3' : LousaPalette.berry} />
-            <Text style={[styles.periodButtonText, { color: colors.onBackground }]}>{labels.editDay}</Text>
-          </PressScale>
-          {lastUndo ? (
-            <PressScale onPress={undoLastChange} style={[styles.periodButton, { borderColor: colors.outlineVariant }]}>
-              <MaterialSymbol name="undo" size={18} color={colors.onSurfaceVariant} />
-              <Text style={[styles.periodButtonText, { color: colors.onSurfaceVariant }]}>{labels.undo}</Text>
-            </PressScale>
-          ) : null}
+          <SecondaryButton label={labels.editDay} icon="edit_calendar" iconPlacement="left" onPress={() => setActionSheetOpen(true)} />
+          {lastUndo ? <TextButton label={labels.undo} icon="undo" iconPlacement="left" fullWidth onPress={undoLastChange} /> : null}
         </Animated.View>
 
         {toast ? (
@@ -554,7 +523,7 @@ export default function CycleScreen() {
 
         {notesDirty ? (
           <View style={[styles.savePanel, { backgroundColor: isDark ? 'rgba(23,19,29,0.96)' : 'rgba(251,248,247,0.96)', borderColor: isDark ? LousaPalette.lineDark : LousaPalette.line }]}>
-            <PrimaryAction label={labels.save} icon="check" onPress={save} />
+            <PrimaryButton label={labels.save} icon="check" onPress={save} />
           </View>
         ) : null}
 
@@ -581,14 +550,11 @@ export default function CycleScreen() {
               </PressScale>
             ))}
             {(selectedObservation || selectedRecord) ? (
-              <PressScale onPress={confirmRemoveSelectedCycleEntry} style={styles.sheetDelete}>
-                <MaterialSymbol name="delete" size={20} color={LousaPalette.danger} />
-                <Text style={styles.sheetDeleteText}>{labels.deleteDay}</Text>
-              </PressScale>
+              <View style={styles.sheetButtonGap}>
+                <DestructiveButton label={labels.deleteDay} icon="delete" iconPlacement="left" onPress={confirmRemoveSelectedCycleEntry} />
+              </View>
             ) : null}
-            <PressScale onPress={() => setActionSheetOpen(false)} style={[styles.sheetCancel, { borderColor: colors.outlineVariant }]}>
-              <Text style={[styles.sheetCancelText, { color: colors.onBackground }]}>{labels.cancel}</Text>
-            </PressScale>
+            <SecondaryButton label={labels.cancel} onPress={() => setActionSheetOpen(false)} />
           </View>
         </View>
       </Modal>
@@ -604,7 +570,7 @@ const styles = StyleSheet.create({
   header: { marginTop: 4, marginBottom: 18 },
   title: { fontFamily: 'sans-serif-medium', fontSize: 29, lineHeight: 35, letterSpacing: -0.3 },
   subtitle: { fontFamily: 'sans-serif', fontSize: 14, lineHeight: 20, marginTop: 7 },
-  section: { marginBottom: 28 },
+  section: { marginBottom: 22 },
   calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   monthArrow: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   monthTitle: { fontFamily: 'sans-serif-medium', fontSize: 20, textTransform: 'capitalize' },
@@ -640,12 +606,14 @@ const styles = StyleSheet.create({
   emptyCycleBlock: { flexDirection: 'row', gap: 13, alignItems: 'flex-start' },
   emptyCycleAction: { marginTop: 12, minHeight: 48, borderRadius: 999, borderWidth: 1, borderColor: '#E7DADF', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, backgroundColor: '#FFFDFE' },
   emptyCycleActionText: { color: LousaPalette.berry, fontFamily: 'sans-serif-medium', fontSize: 13 },
+  inlineButtonWrap: { marginTop: 12, alignSelf: 'flex-start' },
   adviceRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
   adviceText: { flex: 1, fontFamily: 'sans-serif-medium', fontSize: 15, lineHeight: 23 },
   fieldTitle: { fontFamily: 'sans-serif-medium', fontSize: 14 },
   fieldGap: { marginTop: 22 },
   moodGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 11 },
   moodCard: { width: '48%', minHeight: 76, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', padding: 9 },
+  moodChoice: { width: '48%', minHeight: 58 },
   moodText: { fontFamily: 'sans-serif-medium', fontSize: 12, marginTop: 6, textAlign: 'center' },
   symptomsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 11 },
   symptomChip: { minHeight: 48, borderRadius: 999, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12 },
@@ -682,4 +650,5 @@ const styles = StyleSheet.create({
   sheetDeleteText: { color: LousaPalette.danger, fontFamily: 'sans-serif-medium', fontSize: 14 },
   sheetCancel: { minHeight: 50, borderRadius: 25, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   sheetCancelText: { fontFamily: 'sans-serif-medium', fontSize: 14 },
+  sheetButtonGap: { marginTop: 10, marginBottom: 8 },
 });

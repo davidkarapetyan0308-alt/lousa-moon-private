@@ -25,6 +25,7 @@ type Manifest = { version: 1; generation: string; chunks: number; length: number
 
 const CHUNK_SIZE = 1600;
 const PREFIX = 'lousa-encrypted-state-v1';
+const SECURE_READ_TIMEOUT_MS = 4_000;
 let cachedModule: SecureStoreModule | null | undefined;
 
 function getSecureStore(): SecureStoreModule | null {
@@ -69,6 +70,21 @@ function split(value: string) {
   return chunks.length ? chunks : [''];
 }
 
+
+async function readWithTimeout<T>(operation: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Secure storage read timeout: ${label}`)), SECURE_READ_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function isValidPersistedJson(value: string | null) {
   if (value == null) return true;
   try {
@@ -86,7 +102,7 @@ async function secureSet(store: SecureStoreModule, key: string, value: string) {
 }
 
 async function readManifest(store: SecureStoreModule, name: string): Promise<Manifest | null> {
-  const raw = await store.getItemAsync(manifestKey(name));
+  const raw = await readWithTimeout(store.getItemAsync(manifestKey(name)), `${name}:manifest`);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Manifest;
@@ -108,26 +124,40 @@ export function secureStateStorageAvailable() {
 
 export const encryptedStateStorage: StateStorage = {
   async getItem(name) {
-    const store = requireSecureStore(name);
-    if (!store) return AsyncStorage.getItem(name);
+    try {
+      const store = requireSecureStore(name);
+      if (!store) return AsyncStorage.getItem(name);
 
-    const manifest = await readManifest(store, name);
-    if (!manifest) {
-      // One-time migration from the historical unencrypted store.
-      const legacy = await AsyncStorage.getItem(name);
-      if (legacy && isValidPersistedJson(legacy)) {
-        await encryptedStateStorage.setItem(name, legacy);
-        await AsyncStorage.removeItem(name).catch(() => {});
-        return legacy;
+      const manifest = await readManifest(store, name);
+      if (!manifest) {
+        // One-time migration from the historical unencrypted store.
+        const legacy = await AsyncStorage.getItem(name);
+        if (legacy && isValidPersistedJson(legacy)) {
+          await encryptedStateStorage.setItem(name, legacy);
+          await AsyncStorage.removeItem(name).catch(() => {});
+          return legacy;
+        }
+        return null;
       }
-      return null;
-    }
 
-    const chunks = await Promise.all(Array.from({ length: manifest.chunks }, (_, index) => store.getItemAsync(chunkKey(name, manifest.generation, index))));
-    if (chunks.some((chunk) => chunk == null)) return null;
-    const value = chunks.join('');
-    if (value.length !== manifest.length || !isValidPersistedJson(value)) return null;
-    return value;
+      const chunks = await Promise.all(Array.from(
+        { length: manifest.chunks },
+        (_, index) => readWithTimeout(
+          store.getItemAsync(chunkKey(name, manifest.generation, index)),
+          `${name}:chunk:${index}`,
+        ),
+      ));
+      if (chunks.some((chunk) => chunk == null)) return null;
+      const value = chunks.join('');
+      if (value.length !== manifest.length || !isValidPersistedJson(value)) return null;
+      return value;
+    } catch (error) {
+      // A locked/corrupted keystore must never trap the whole application on the
+      // startup error card. Preserve encrypted data and boot with safe defaults.
+      console.warn(`[BOOT] encrypted state unavailable for ${name}; preserved for a later retry`, error);
+      const legacy = await AsyncStorage.getItem(name).catch(() => null);
+      return legacy && isValidPersistedJson(legacy) ? legacy : null;
+    }
   },
 
   async setItem(name, value) {

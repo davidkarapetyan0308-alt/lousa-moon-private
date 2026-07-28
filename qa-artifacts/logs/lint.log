@@ -1,0 +1,7 @@
+$ npm run lint -- --quiet
+
+> lousa-moon@1.18.22 lint
+> eslint . --quiet
+
+sh: 1: eslint: not found
+EXIT=127

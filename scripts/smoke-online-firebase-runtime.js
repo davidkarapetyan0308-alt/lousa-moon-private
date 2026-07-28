@@ -1,9 +1,5 @@
 #!/usr/bin/env node
-const apiUrl = String(
-  process.env.EXPO_PUBLIC_LOUSA_API_URL ||
-    process.env.PUBLIC_API_URL ||
-    '',
-).replace(/\/+$/, '');
+const apiUrl = String(process.env.EXPO_PUBLIC_LOUSA_API_URL || process.env.PUBLIC_API_URL || '').replace(/\/+$/, '');
 
 function fail(message, details = []) {
   console.error('smoke:online-firebase-runtime FAILED');
@@ -12,57 +8,55 @@ function fail(message, details = []) {
   process.exit(1);
 }
 
-function warn(message, details = []) {
-  console.warn('smoke:online-firebase-runtime WARNING');
-  console.warn(`- ${message}`);
-  details.forEach((detail) => console.warn(`- ${detail}`));
+async function request(path, options = {}, timeoutMs = 20_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${apiUrl}${path}`, { ...options, signal: controller.signal });
+    const payload = await response.json().catch(() => null);
+    return { response, payload };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function main() {
   if (!apiUrl) fail('EXPO_PUBLIC_LOUSA_API_URL or PUBLIC_API_URL is missing.');
   if (!apiUrl.startsWith('https://')) fail('Online APK must use an HTTPS backend.', [`API URL: ${apiUrl}`]);
 
-  const healthResponse = await fetch(`${apiUrl}/health`, { headers: { Accept: 'application/json' } });
-  const health = await healthResponse.json().catch(() => null);
-  if (!healthResponse.ok || !health?.ok) {
-    fail('Backend /health is not OK.', [`HTTP ${healthResponse.status}`, JSON.stringify(health)]);
-  }
-  if (!health.databaseConfigured) fail('Backend has no database configured.');
-  if (health.databaseAuthSchemaConfigured !== true) {
-    warn('Backend auth database schema is not migrated; APK will use Firebase fallback session until Render deploys the fixed API.', [
-      'Expected /health.databaseAuthSchemaConfigured to be true for full LOUSA backend sessions.',
-      JSON.stringify(health),
-    ]);
-  }
-  if (!health.firebaseProjectConfigured) fail('Backend has no Firebase project configured.');
-  if (!health.firebaseAdminConfigured && !health.firebaseRestConfigured) {
-    fail('Backend cannot verify Firebase tokens.', [
-      'Expected firebaseAdminConfigured or firebaseRestConfigured to be true.',
-      JSON.stringify(health),
-    ]);
+  const health = await request('/health');
+  if (!health.response.ok || health.payload?.status !== 'ok') {
+    fail('Backend /health is not OK.', [`HTTP ${health.response.status}`, JSON.stringify(health.payload)]);
   }
 
-  const authResponse = await fetch(`${apiUrl}/v1/auth/firebase/session`, {
+  const ready = await request('/ready', {}, 30_000);
+  if (!ready.response.ok || ready.payload?.status !== 'ready') {
+    fail('Backend /ready is not ready for Firebase sessions.', [
+      `HTTP ${ready.response.status}`,
+      JSON.stringify(ready.payload),
+    ]);
+  }
+  if (ready.payload?.checks?.database !== 'ok') fail('Backend database readiness failed.');
+  if (ready.payload?.checks?.authSchema !== 'ok') fail('Backend auth schema is not migrated.');
+  if (!['admin', 'rest'].includes(ready.payload?.checks?.firebaseAdmin)) fail('Firebase verifier is unavailable.');
+
+  const auth = await request('/v1/auth/firebase/session', {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   });
-  const authPayload = await authResponse.json().catch(() => null);
-  const code = authPayload?.error?.code;
-  if (authResponse.status !== 400 || code !== 'FIREBASE_ID_TOKEN_REQUIRED') {
-    fail('Firebase session endpoint is not returning the expected contract for missing token.', [
-      `HTTP ${authResponse.status}`,
-      JSON.stringify(authPayload),
+  const code = auth.payload?.error?.code;
+  if (auth.response.status !== 401 || code !== 'FIREBASE_ID_TOKEN_REQUIRED') {
+    fail('Firebase session endpoint is not returning the expected missing-token contract.', [
+      `HTTP ${auth.response.status}`,
+      JSON.stringify(auth.payload),
     ]);
   }
 
   console.log('smoke:online-firebase-runtime PASS');
   console.log(`API URL: ${apiUrl}`);
-  console.log(`Firebase Admin: ${Boolean(health.firebaseAdminConfigured)}`);
-  console.log(`Firebase REST: ${Boolean(health.firebaseRestConfigured)}`);
-  console.log(`Auth DB schema: ${Boolean(health.databaseAuthSchemaConfigured)}`);
+  console.log(`Firebase verifier: ${ready.payload.checks.firebaseAdmin}`);
+  console.log(`Auth DB schema: ${ready.payload.checks.authSchema}`);
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : 'Unknown smoke test error.');
-});
+main().catch((error) => fail(error instanceof Error ? error.message : 'Unknown smoke test error.'));

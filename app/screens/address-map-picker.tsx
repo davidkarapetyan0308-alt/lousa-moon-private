@@ -23,7 +23,7 @@ import {
 import { MaterialSymbol } from "../../src/components/MaterialSymbol";
 import {
   PressScale,
-  PrimaryAction,
+  PrimaryButton,
   SurfaceCard,
 } from "../../src/components/ui";
 import type { SupportedLanguage } from "../../src/domain/models";
@@ -472,7 +472,7 @@ export default function AddressMapPickerScreen() {
             {message}
           </Text>
         ) : null}
-        <PrimaryAction
+        <PrimaryButton
           label={copy.confirm}
           icon="check"
           onPress={confirm}

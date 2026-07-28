@@ -9,7 +9,7 @@ const files = {
   authShell: read('src/features/auth/components/PremiumAuthShell.tsx'),
   login: read('app/auth/login.tsx'),
   onboarding: read('app/auth/onboarding.tsx'),
-  logState: read('app/screens/log-state.tsx'),
+  logState: read('app/screens/wellness-log.tsx'),
   cycle: read('app/(tabs)/cycle.tsx'),
   chat: read('app/screens/help-assistant.tsx'),
   address: read('app/screens/address-map.tsx'),

@@ -88,7 +88,7 @@ function addDemoLogs(count: number): void {
 
 export function applyUxTestPersona(personaId: UxTestPersonaId): void {
   resetPersonaData();
-  useUserStore.setState({ isOnboarded: true, isDemoMode: true, communicationStyle: 'warm', name: 'Ани' });
+  useUserStore.setState({ isOnboarded: true, isDemoMode: true, isGuestMode: false, guestAuthFlowActive: false, guestStartedAt: null, communicationStyle: 'warm', name: 'Ани' });
 
   if (personaId === 'box_user') {
     seedDemoData();

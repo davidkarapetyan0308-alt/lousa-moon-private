@@ -11,9 +11,9 @@ const TAB_CONTENT_HEIGHT = 60;
 const TAB_VERTICAL_PADDING = 6;
 
 const LABELS = {
-  en: { today: 'Today', tracking: 'Calendar', forYou: 'For you', box: 'LOUSA BOX' },
-  ru: { today: 'Сегодня', tracking: 'Календарь', forYou: 'Для тебя', box: 'Бокс' },
-  hy: { today: 'Այսօր', tracking: 'Օրացույց', forYou: 'Քեզ համար', box: 'Բոքս' },
+  en: { today: 'Today', tracking: 'Calendar', box: 'LOUSA BOX', profile: 'Profile' },
+  ru: { today: 'Сегодня', tracking: 'Календарь', box: 'LOUSA BOX', profile: 'Профиль' },
+  hy: { today: 'Այսօր', tracking: 'Օրացույց', box: 'LOUSA BOX', profile: 'Պրոֆիլ' },
 };
 
 function TabIcon({ icon, label, focused, compact }: { icon: string; label: string; focused: boolean; compact: boolean }) {
@@ -56,8 +56,9 @@ export default function TabsLayout() {
     }}>
       <Tabs.Screen name="index" options={{ tabBarIcon: ({ focused }) => <TabIcon icon="home" label={labels.today} focused={focused} compact={compact} /> }} />
       <Tabs.Screen name="cycle" options={{ tabBarIcon: ({ focused }) => <TabIcon icon="calendar_month" label={labels.tracking} focused={focused} compact={compact} /> }} />
-      <Tabs.Screen name="for-you" options={{ tabBarIcon: ({ focused }) => <TabIcon icon="auto_awesome" label={labels.forYou} focused={focused} compact={compact} /> }} />
       <Tabs.Screen name="box" options={{ tabBarIcon: ({ focused }) => <TabIcon icon="redeem" label={labels.box} focused={focused} compact={compact} /> }} />
+      <Tabs.Screen name="profile" options={{ tabBarIcon: ({ focused }) => <TabIcon icon="person" label={labels.profile} focused={focused} compact={compact} /> }} />
+      <Tabs.Screen name="for-you" options={{ href: null }} />
       <Tabs.Screen name="lunar" options={{ href: null }} />
       <Tabs.Screen name="wellness" options={{ href: null }} />
     </Tabs>

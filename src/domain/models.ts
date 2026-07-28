@@ -246,6 +246,8 @@ export interface OrderStatusEvent {
 
 
 export type DeliveryAddressType = 'apartment' | 'private_house' | 'office' | 'workplace' | 'hotel' | 'other';
+export type AddressFieldOrigin = 'provider_confirmed' | 'inferred' | 'user_entered' | 'unknown';
+
 export type DeliveryHandoffType = 'hand_to_recipient' | 'leave_at_door' | 'leave_with_reception' | 'leave_with_security' | 'call_on_arrival' | 'other';
 
 export interface DeliveryAddress {
@@ -284,6 +286,7 @@ export interface DeliveryAddress {
   formattedAddress: string;
   provider: 'google' | 'maptiler' | 'device' | 'manual';
   providerPlaceId: string | null;
+  fieldOrigins?: Record<string, AddressFieldOrigin>;
   deliveryZoneId: string | null;
   deliveryFeeMinor: number | null;
   estimatedMinutes: number | null;
@@ -313,6 +316,7 @@ export interface DeliveryAddressSnapshot {
   deliveryZoneId?: string | null;
   deliveryFeeMinor?: number | null;
   estimatedMinutes?: number | null;
+  fieldOrigins?: Record<string, AddressFieldOrigin>;
 }
 
 export interface BoxOrder {

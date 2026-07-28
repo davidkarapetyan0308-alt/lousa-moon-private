@@ -20,6 +20,7 @@ export interface LousaExportEnvelope {
     language: string;
     isPremium: boolean;
     isDemoMode: boolean;
+    isGuestMode: boolean;
     communicationStyle: string;
   };
   cycle: ReturnType<typeof useCycleStore.getState> extends infer T ? Partial<T> : never;
@@ -46,6 +47,7 @@ export function createLocalExport(): LousaExportEnvelope {
       language: user.language,
       isPremium: user.isPremium,
       isDemoMode: user.isDemoMode,
+      isGuestMode: user.isGuestMode,
       communicationStyle: user.communicationStyle,
     },
     cycle: stripFunctions(useCycleStore.getState()) as LousaExportEnvelope['cycle'],

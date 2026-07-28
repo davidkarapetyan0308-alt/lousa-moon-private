@@ -15,6 +15,7 @@ import { ThemeName } from '../../src/theme/tokens';
 import { exportLocalData } from '../../src/services/dataExport';
 import { clearAllLocalData } from '../../src/services/localData';
 import { getServiceMode, services } from '../../src/services';
+import { getUserFacingErrorMessage } from '../../src/services/errorMessages';
 
 const COPY = {
   ru: {
@@ -66,6 +67,7 @@ export default function SettingsScreen() {
   const { compactWidth } = useResponsiveLayout();
   const language = useUserStore((s) => s.language);
   const setLanguage = useUserStore((s) => s.setLanguage);
+  const isGuestMode = useUserStore((s) => s.isGuestMode);
   const communicationStyle = useUserStore((s) => s.communicationStyle);
   const setCommunicationStyle = useUserStore((s) => s.setCommunicationStyle);
   const notifications = useNotificationStore((s) => s.enabled);
@@ -90,14 +92,19 @@ export default function SettingsScreen() {
     },
   ]);
 
-  const deleteAccount = () => Alert.alert(copy.deleteAccountTitle, copy.deleteAccountText, [
+  const deleteAccount = () => {
+    if (isGuestMode) {
+      Alert.alert(copy.deleteAccountTitle, language === 'en' ? 'Guest mode has no server account. Use “Delete local data” instead.' : language === 'hy' ? 'Հյուրի ռեժիմը սերվերային հաշիվ չունի։ Օգտագործեք «Ջնջել տեղային տվյալները»։' : 'У гостевого режима нет серверного аккаунта. Используйте «Удалить локальные данные».');
+      return;
+    }
+    Alert.alert(copy.deleteAccountTitle, copy.deleteAccountText, [
     { text: copy.cancel, style: 'cancel' },
     {
       text: copy.deleteAccountConfirm,
       style: 'destructive',
       onPress: () => {
         if (getServiceMode() !== 'api') {
-          Alert.alert(copy.deleteAccountTitle, 'Для удаления серверного аккаунта нужен подключённый backend LOUSA.');
+          Alert.alert(copy.deleteAccountTitle, language === 'en' ? 'Account deletion is temporarily unavailable. Try again later.' : language === 'hy' ? 'Հաշվի ջնջումը ժամանակավորապես հասանելի չէ։ Փորձեք ավելի ուշ։' : 'Удаление аккаунта временно недоступно. Попробуйте позже.');
           return;
         }
         services.account.deleteAccount()
@@ -106,10 +113,11 @@ export default function SettingsScreen() {
             await clearAllLocalData();
             router.replace('/auth/login');
           })
-          .catch((cause) => Alert.alert(copy.deleteAccountTitle, cause instanceof Error ? cause.message : copy.systemInfo));
+          .catch((cause) => Alert.alert(copy.deleteAccountTitle, getUserFacingErrorMessage(cause, copy.systemInfo)));
       },
     },
-  ]);
+    ]);
+  };
 
   const shareExport = async () => {
     try {
@@ -211,8 +219,10 @@ export default function SettingsScreen() {
             <SettingRow icon="download" title={copy.export} description={copy.exportDesc} onPress={shareExport} />
             <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
             <SettingRow icon="delete_sweep" title={copy.delete} onPress={deleteData} />
-            <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
-            <SettingRow icon="delete_forever" title={copy.deleteAccount} description={copy.deleteAccountText} onPress={deleteAccount} />
+            {!isGuestMode ? <>
+              <View style={[styles.divider, { backgroundColor: colors.outlineVariant }]} />
+              <SettingRow icon="delete_forever" title={copy.deleteAccount} description={copy.deleteAccountText} onPress={deleteAccount} />
+            </> : null}
           </SurfaceCard>
         </View>
 

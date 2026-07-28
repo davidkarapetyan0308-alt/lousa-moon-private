@@ -1,0 +1,42 @@
+# Production template. Do not deploy until a real payment adapter, Redis,
+# production database and Firebase Admin credentials are configured.
+services:
+  - type: web
+    name: lousa-moon-api-production
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: NODE_ENV
+        value: production
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REQUIRE_REDIS
+        value: "true"
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: AUTH_PROVIDER
+        value: firebase
+      - key: FIREBASE_PROJECT_ID
+        value: lousa-moon
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: ALLOW_FIREBASE_REST_FALLBACK
+        value: "false"
+      - key: PAYMENT_PROVIDER
+        sync: false
+      - key: PAYMENT_SECRET_KEY
+        sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        sync: false

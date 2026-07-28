@@ -1,84 +1,143 @@
 openapi: 3.0.3
 info:
-  title: LOUSA Sandbox API
-  version: 1.18.0
-  description: >-
-    Backend contract for LOUSA Mobile. Payment remains blocked unless a configured provider is available;
-    cycle facts, delivery data, subscription actions and packing quality are server-controlled.
+  title: LOUSA API
+  version: 1.18.22
+  description: Mobile, admin API and courier contract for LOUSA Moon. Sandbox payments are forbidden in production; health
+    and delivery data are separated by role.
 servers:
-  - url: http://localhost:4100
+- url: http://localhost:4100
 paths:
   /health:
     get:
-      summary: Sandbox health check
+      summary: Lightweight process health check
       responses:
         '200':
-          description: Healthy
+          description: API process is running
           content:
             application/json:
               schema:
                 type: object
-                required: [status, service, time]
+                required: [status, service, version, build, timestamp]
                 properties:
-                  status: { type: string, example: ok }
-                  service: { type: string, example: lousa-api-sandbox }
-                  time: { type: string, format: date-time }
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: lousa-moon-api
+                  version:
+                    type: string
+                    example: 1.18.22
+                  build:
+                    type: integer
+                    example: 131
+                  timestamp:
+                    type: string
+                    format: date-time
+  /ready:
+    get:
+      summary: Verify database, auth schema, Redis policy and Firebase Admin readiness
+      responses:
+        '200':
+          description: Backend is ready to create Firebase sessions
+        '503':
+          description: One or more critical dependencies are not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: not_ready
+                  checks:
+                    type: object
+                  problems:
+                    type: array
+                    items:
+                      type: string
   /v1/maps/autocomplete:
     get:
       summary: Search real Google Places address predictions
       parameters:
-        - in: query
-          name: input
-          required: true
-          schema: { type: string, minLength: 3 }
-        - in: query
-          name: language
-          schema: { type: string, enum: [ru, en, hy] }
-        - in: query
-          name: sessionToken
-          schema: { type: string }
+      - in: query
+        name: input
+        required: true
+        schema:
+          type: string
+          minLength: 3
+      - in: query
+        name: language
+        schema:
+          type: string
+          enum:
+          - ru
+          - en
+          - hy
+      - in: query
+        name: sessionToken
+        schema:
+          type: string
       responses:
         '200':
           description: Real address suggestions from Google Places
-        '503': { $ref: '#/components/responses/ApiError' }
+        '503':
+          $ref: '#/components/responses/ApiError'
   /v1/maps/place-details:
     get:
       summary: Resolve a Google Place ID to coordinates and structured address
       parameters:
-        - in: query
-          name: placeId
-          required: true
-          schema: { type: string }
-        - in: query
-          name: language
-          schema: { type: string, enum: [ru, en, hy] }
-        - in: query
-          name: sessionToken
-          schema: { type: string }
+      - in: query
+        name: placeId
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: language
+        schema:
+          type: string
+          enum:
+          - ru
+          - en
+          - hy
+      - in: query
+        name: sessionToken
+        schema:
+          type: string
       responses:
         '200':
           description: Geocoded address
-        '503': { $ref: '#/components/responses/ApiError' }
+        '503':
+          $ref: '#/components/responses/ApiError'
   /v1/maps/reverse-geocode:
     get:
       summary: Resolve real coordinates to a Google address
       parameters:
-        - in: query
-          name: latitude
-          required: true
-          schema: { type: number }
-        - in: query
-          name: longitude
-          required: true
-          schema: { type: number }
-        - in: query
-          name: language
-          schema: { type: string, enum: [ru, en, hy] }
+      - in: query
+        name: latitude
+        required: true
+        schema:
+          type: number
+      - in: query
+        name: longitude
+        required: true
+        schema:
+          type: number
+      - in: query
+        name: language
+        schema:
+          type: string
+          enum:
+          - ru
+          - en
+          - hy
       responses:
         '200':
           description: Reverse-geocoded address
-        '404': { $ref: '#/components/responses/ApiError' }
-        '503': { $ref: '#/components/responses/ApiError' }
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '503':
+          $ref: '#/components/responses/ApiError'
   /v1/delivery/check-zone:
     post:
       summary: Check whether real coordinates are inside the Gyumri delivery zone
@@ -88,127 +147,168 @@ paths:
           application/json:
             schema:
               type: object
-              required: [latitude, longitude]
+              required:
+              - latitude
+              - longitude
               properties:
-                latitude: { type: number }
-                longitude: { type: number }
+                latitude:
+                  type: number
+                longitude:
+                  type: number
       responses:
         '200':
           description: Delivery zone, fee and ETA
   /v1/delivery-addresses:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: List saved delivery addresses
       responses:
         '200':
           description: Saved addresses
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Save a coordinate-verified delivery address
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/DeliveryAddress' }
+            schema:
+              $ref: '#/components/schemas/DeliveryAddress'
       responses:
         '201':
           description: Saved and server-validated address
-        '400': { $ref: '#/components/responses/ApiError' }
-        '401': { $ref: '#/components/responses/ApiError' }
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
   /v1/delivery-addresses/{addressId}:
     patch:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Update an existing delivery address and revalidate its zone
       parameters:
-        - in: path
-          name: addressId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: addressId
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/DeliveryAddress' }
+            schema:
+              $ref: '#/components/schemas/DeliveryAddress'
       responses:
-        '200': { description: Updated, server-validated address }
-        '404': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Updated
+          server-validated address: null
+        '404':
+          $ref: '#/components/responses/ApiError'
     delete:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Delete one of the authenticated user's delivery addresses
       parameters:
-        - in: path
-          name: addressId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: addressId
+        required: true
+        schema:
+          type: string
       responses:
-        '200': { description: Address deleted }
+        '200':
+          description: Address deleted
   /v1/cycle/calendar:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Return the authenticated user's private cycle facts and cautious forecast
       responses:
-        '200': { description: Private calendar data; never included in courier/admin delivery DTOs }
+        '200':
+          description: Private calendar data; never included in courier/admin delivery DTOs
   /v1/cycle/recalculate:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Recalculate a cautious cycle forecast from confirmed records
       responses:
         '200':
           description: Recalculated prediction
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CyclePrediction' }
+              schema:
+                $ref: '#/components/schemas/CyclePrediction'
   /v1/cycle/observations:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: List user-confirmed day observations
       responses:
-        '200': { description: Cycle observations }
+        '200':
+          description: Cycle observations
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Create or replace a user-confirmed day observation
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CycleObservation' }
+            schema:
+              $ref: '#/components/schemas/CycleObservation'
       responses:
-        '200': { description: Observation saved }
+        '200':
+          description: Observation saved
   /v1/cycle/observations/{observationId}:
     delete:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Remove a user-confirmed day observation
       parameters:
-        - in: path
-          name: observationId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: observationId
+        required: true
+        schema:
+          type: string
       responses:
-        '200': { description: Observation deleted }
+        '200':
+          description: Observation deleted
   /v1/admin/delivery-addresses:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: List delivery-only customer address data for authorized operations roles
       responses:
-        '200': { description: Delivery addresses without cycle, symptom, mood or private-note data }
+        '200':
+          description: Delivery addresses without cycle
+          symptom: null
+          mood or private-note data: null
   /v1/admin/delivery-map:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Return delivery-only map points for authorized operations roles
       responses:
-        '200': { description: Delivery map points with explicit privacy boundary }
+        '200':
+          description: Delivery map points with explicit privacy boundary
   /v1/admin/customers/{customerId}/delivery-profile:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Return a delivery-only customer profile for operations
       parameters:
-        - in: path
-          name: customerId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: customerId
+        required: true
+        schema:
+          type: string
       responses:
-        '200': { description: Contact, plan and delivery details; private health data excluded }
-        '404': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Contact
+          plan and delivery details; private health data excluded: null
+        '404':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/google:
     post:
       summary: Verify a Google ID token and create or sign in a sandbox user
@@ -219,34 +319,55 @@ paths:
           application/json:
             schema:
               type: object
-              required: [idToken]
+              required:
+              - idToken
               properties:
-                idToken: { type: string }
+                idToken:
+                  type: string
       responses:
         '200':
           description: Google account linked and LOUSA session created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LoginResponse' }
-        '400': { $ref: '#/components/responses/ApiError' }
-        '401': { $ref: '#/components/responses/ApiError' }
-        '429': { $ref: '#/components/responses/ApiError' }
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '429':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/register:
     post:
       summary: Start email registration
-      description: Generates a random one-time code and sends it through the configured email provider. The code is never returned to the client.
+      description: Generates a random one-time code and sends it through the configured email provider. The code is never
+        returned to the client.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [name, email, password]
+              required:
+              - name
+              - email
+              - password
               properties:
-                name: { type: string, minLength: 1 }
-                email: { type: string, format: email }
-                password: { type: string, minLength: 8 }
-                language: { type: string, enum: [ru, en, hy] }
+                name:
+                  type: string
+                  minLength: 1
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                language:
+                  type: string
+                  enum:
+                  - ru
+                  - en
+                  - hy
       responses:
         '202':
           description: Verification is pending
@@ -255,11 +376,18 @@ paths:
               schema:
                 type: object
                 properties:
-                  expiresAt: { type: string, format: date-time }
-                  resendAfterSeconds: { type: integer, example: 60 }
-        '400': { $ref: '#/components/responses/ApiError' }
-        '409': { $ref: '#/components/responses/ApiError' }
-        '429': { $ref: '#/components/responses/ApiError' }
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  resendAfterSeconds:
+                    type: integer
+                    example: 60
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '409':
+          $ref: '#/components/responses/ApiError'
+        '429':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/verify-email:
     post:
       summary: Verify email registration with a one-time code
@@ -269,17 +397,26 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, code]
+              required:
+              - email
+              - code
               properties:
-                email: { type: string, format: email }
-                code: { type: string, pattern: '^\d{6}$', example: '482913' }
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  pattern: ^\d{6}$
+                  example: '482913'
       responses:
         '201':
           description: Verified account and session created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LoginResponse' }
-        '400': { $ref: '#/components/responses/ApiError' }
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/refresh:
     post:
       summary: Rotate an in-memory sandbox refresh token
@@ -289,29 +426,37 @@ paths:
           application/json:
             schema:
               type: object
-              required: [refreshToken]
+              required:
+              - refreshToken
               properties:
-                refreshToken: { type: string }
+                refreshToken:
+                  type: string
       responses:
         '200':
           description: Rotated sandbox session
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/LoginResponse' }
-        '401': { $ref: '#/components/responses/ApiError' }
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/password-reset/request:
     post:
       summary: Request a password reset code
-      description: Sends a random one-time code when the account exists, while returning a generic response to prevent account enumeration.
+      description: Sends a random one-time code when the account exists, while returning a generic response to prevent account
+        enumeration.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [email]
+              required:
+              - email
               properties:
-                email: { type: string, format: email }
+                email:
+                  type: string
+                  format: email
       responses:
         '200':
           description: Request accepted
@@ -324,14 +469,26 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, code, newPassword]
+              required:
+              - email
+              - code
+              - newPassword
               properties:
-                email: { type: string, format: email }
-                code: { type: string, pattern: '^\d{6}$', example: '482913' }
-                newPassword: { type: string, minLength: 8 }
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+                  pattern: ^\d{6}$
+                  example: '482913'
+                newPassword:
+                  type: string
+                  minLength: 8
       responses:
-        '200': { description: Password updated and sessions revoked }
-        '400': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Password updated and sessions revoked
+        '400':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/login:
     post:
       summary: Sign in to the in-memory demo account
@@ -348,25 +505,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
-        '401': { $ref: '#/components/responses/ApiError' }
-        '429': { $ref: '#/components/responses/ApiError' }
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '429':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/logout:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Revoke the current in-memory token
       responses:
         '200':
           description: Logged out
   /v1/auth/logout-all:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Revoke all in-memory access and refresh sessions for the current user
       responses:
-        '200': { description: All sessions revoked }
-        '401': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: All sessions revoked
+        '401':
+          $ref: '#/components/responses/ApiError'
   /v1/auth/sessions:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: List current in-memory access sessions
       responses:
         '200':
@@ -381,14 +545,23 @@ paths:
                     items:
                       type: object
                       properties:
-                        id: { type: string }
-                        createdAt: { type: string, format: date-time }
-                        expiresAt: { type: string, format: date-time }
-                        sandbox: { type: boolean, example: true }
-        '401': { $ref: '#/components/responses/ApiError' }
+                        id:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        expiresAt:
+                          type: string
+                          format: date-time
+                        sandbox:
+                          type: boolean
+                          example: true
+        '401':
+          $ref: '#/components/responses/ApiError'
   /v1/profile:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Read the sandbox profile
       responses:
         '200':
@@ -398,14 +571,22 @@ paths:
               schema:
                 type: object
                 properties:
-                  id: { type: string }
-                  email: { type: string, format: email }
-                  name: { type: string }
-                  demo: { type: boolean, example: true }
-        '401': { $ref: '#/components/responses/ApiError' }
+                  id:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+                  name:
+                    type: string
+                  demo:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/ApiError'
   /v1/periods:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: List period records
       responses:
         '200':
@@ -417,37 +598,47 @@ paths:
                 properties:
                   items:
                     type: array
-                    items: { $ref: '#/components/schemas/PeriodRecord' }
+                    items:
+                      $ref: '#/components/schemas/PeriodRecord'
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Create or replace a period record in sandbox memory
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PeriodRecordInput' }
+            schema:
+              $ref: '#/components/schemas/PeriodRecordInput'
       responses:
         '201':
           description: Saved period
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PeriodRecord' }
-        '400': { $ref: '#/components/responses/ApiError' }
+              schema:
+                $ref: '#/components/schemas/PeriodRecord'
+        '400':
+          $ref: '#/components/responses/ApiError'
   /v1/periods/{periodId}:
     delete:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Delete a sandbox period
       parameters:
-        - in: path
-          name: periodId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: periodId
+        required: true
+        schema:
+          type: string
       responses:
-        '200': { description: Deleted }
-        '404': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/ApiError'
   /v1/prediction:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Calculate a calendar estimate from saved sandbox periods
       description: The response is not a diagnosis, contraception or confirmation of ovulation.
       responses:
@@ -455,132 +646,195 @@ paths:
           description: Cycle prediction
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CyclePrediction' }
+              schema:
+                $ref: '#/components/schemas/CyclePrediction'
   /v1/box/preferences:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Read sandbox box preferences
       responses:
-        '200': { description: Preferences }
+        '200':
+          description: Preferences
     put:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Store sandbox box preferences
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema:
+              type: object
+              additionalProperties: true
       responses:
-        '200': { description: Preferences saved }
-  /v1/subscription:
-    get:
-      security: [{ bearerAuth: [] }]
-      summary: Read the server subscription state
-      responses:
-        '200': { description: Subscription or null }
+        '200':
+          description: Preferences saved
     post:
-      security: [{ bearerAuth: [] }]
-      summary: Activate a subscription from a paid order
+      summary: POST /v1/box/preferences
+      operationId: post_v1_box_preferences
       responses:
-        '200': { description: Active subscription }
-        '409': { $ref: '#/components/responses/ApiError' }
-  /v1/orders:
-    get:
-      security: [{ bearerAuth: [] }]
-      summary: List authenticated user's orders
-      responses:
-        '200': { description: Orders }
-    post:
-      security: [{ bearerAuth: [] }]
-      summary: Create one idempotent order from an unused valid quote
-      responses:
-        '200': { description: Existing or newly created order }
-        '409': { $ref: '#/components/responses/ApiError' }
-  /v1/orders/{orderId}/feedback:
-    post:
-      security: [{ bearerAuth: [] }]
-      summary: Store feedback for a sandbox order
-      parameters:
-        - in: path
-          name: orderId
-          required: true
-          schema: { type: string }
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
-            schema: { type: object, additionalProperties: true }
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/subscription:
+    get:
+      security:
+      - bearerAuth: []
+      summary: Read the server subscription state
       responses:
-        '201': { description: Feedback saved in sandbox memory }
-        '404': { $ref: '#/components/responses/ApiError' }
-  /v1/payments/intents:
+        '200':
+          description: Subscription or null
     post:
-      security: [{ bearerAuth: [] }]
-      summary: Create a sandbox payment intent
-      description: No money is charged.
+      security:
+      - bearerAuth: []
+      summary: Activate a subscription from a paid order
+      responses:
+        '200':
+          description: Active subscription
+        '409':
+          $ref: '#/components/responses/ApiError'
+  /v1/orders:
+    get:
+      security:
+      - bearerAuth: []
+      summary: List authenticated user's orders
+      responses:
+        '200':
+          description: Orders
+    post:
+      security:
+      - bearerAuth: []
+      summary: Create one idempotent order from an unused valid quote
+      responses:
+        '200':
+          description: Existing or newly created order
+        '409':
+          $ref: '#/components/responses/ApiError'
+  /v1/orders/{orderId}/feedback:
+    post:
+      security:
+      - bearerAuth: []
+      summary: Store feedback for a sandbox order
       parameters:
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema: { type: string }
+      - in: path
+        name: orderId
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [orderId, amountMinor]
+              additionalProperties: true
+      responses:
+        '201':
+          description: Feedback saved in sandbox memory
+        '404':
+          $ref: '#/components/responses/ApiError'
+  /v1/payments/intents:
+    post:
+      security:
+      - bearerAuth: []
+      summary: Create a sandbox payment intent
+      description: No money is charged.
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - orderId
+              - amountMinor
               properties:
-                orderId: { type: string }
-                amountMinor: { type: integer, minimum: 1 }
+                orderId:
+                  type: string
+                amountMinor:
+                  type: integer
+                  minimum: 1
       responses:
         '201':
           description: Sandbox intent
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PaymentIntent' }
-        '400': { $ref: '#/components/responses/ApiError' }
+              schema:
+                $ref: '#/components/schemas/PaymentIntent'
+        '400':
+          $ref: '#/components/responses/ApiError'
   /v1/payments/intents/{intentId}/confirm:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Confirm with the sandbox card
       description: No money is charged.
       parameters:
-        - in: path
-          name: intentId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: intentId
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                paymentMethodId: { type: string, example: sandbox-card-4242 }
+                paymentMethodId:
+                  type: string
+                  example: sandbox-card-4242
       responses:
         '200':
           description: Confirmed sandbox intent
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PaymentIntent' }
+              schema:
+                $ref: '#/components/schemas/PaymentIntent'
   /v1/payments/intents/{intentId}/refund:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Create a full or partial sandbox refund
       description: No real money is moved.
       parameters:
-        - in: path
-          name: intentId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: intentId
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                amountMinor: { type: integer, minimum: 1 }
-                reason: { type: string }
+                amountMinor:
+                  type: integer
+                  minimum: 1
+                reason:
+                  type: string
       responses:
         '201':
           description: Sandbox refund created
@@ -589,72 +843,1771 @@ paths:
               schema:
                 type: object
                 properties:
-                  id: { type: string }
-                  paymentIntentId: { type: string }
-                  amountMinor: { type: integer }
-                  status: { type: string }
-                  demo: { type: boolean, example: true }
+                  id:
+                    type: string
+                  paymentIntentId:
+                    type: string
+                  amountMinor:
+                    type: integer
+                  status:
+                    type: string
+                  demo:
+                    type: boolean
+                    example: true
   /v1/cycle/settings:
     get:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Read versioned private cycle settings and questionnaire context
       responses:
-        '200': { description: Cycle settings for the authenticated user }
+        '200':
+          description: Cycle settings for the authenticated user
     put:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Save validated cycle settings and questionnaire context
       responses:
-        '200': { description: Settings saved with server revision }
-        '400': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Settings saved with server revision
+        '400':
+          $ref: '#/components/responses/ApiError'
   /v1/orders/quote:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Create a server-authoritative Box quote
-      description: Delivery is included in the plan. Allergens, stock, address verification and substitution consent are validated before checkout.
+      description: Delivery is included in the plan. Allergens, stock, address verification and substitution consent are validated
+        before checkout.
       responses:
-        '200': { description: Expiring quote with validation errors and warnings }
+        '200':
+          description: Expiring quote with validation errors and warnings
   /v1/subscription/actions:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Pause, resume, skip or cancel an active subscription on the server
       responses:
-        '200': { description: Updated subscription }
-        '409': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Updated subscription
+        '409':
+          $ref: '#/components/responses/ApiError'
   /v1/admin/quality/suppliers:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Create a traceable product supplier for the separate admin program
       responses:
-        '201': { description: Supplier created }
+        '201':
+          description: Supplier created
+  /v1/admin/quality/suppliers/{supplierId}/status:
+    patch:
+      security:
+      - bearerAuth: []
+      summary: Approve, suspend or reject a supplier agreement and quality status
+      parameters:
+      - in: path
+        name: supplierId
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Supplier status updated
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
   /v1/admin/quality/batches:
     post:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Register a lot, expiry date, certificates and QA status
       responses:
-        '201': { description: Product batch created }
+        '201':
+          description: Product batch created
   /v1/admin/quality/batches/{batchId}/release:
     patch:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Release or reject a product batch after QA review
       parameters:
-        - in: path
-          name: batchId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: batchId
+        required: true
+        schema:
+          type: string
       responses:
-        '200': { description: Batch QA state updated }
+        '200':
+          description: Batch QA state updated
   /v1/admin/packing/{orderId}/quality-record:
     put:
-      security: [{ bearerAuth: [] }]
+      security:
+      - bearerAuth: []
       summary: Save sealed packing traceability before courier release
       parameters:
-        - in: path
-          name: orderId
-          required: true
-          schema: { type: string }
+      - in: path
+        name: orderId
+        required: true
+        schema:
+          type: string
       responses:
-        '200': { description: Packing quality record saved }
-        '409': { $ref: '#/components/responses/ApiError' }
+        '200':
+          description: Packing quality record saved
+        '409':
+          $ref: '#/components/responses/ApiError'
+  /v1/admin/packing/{orderId}/quality-record/release:
+    patch:
+      security:
+      - bearerAuth: []
+      summary: Release a sealed Box after independent second-person quality review
+      parameters:
+      - in: path
+        name: orderId
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Packing quality record independently released
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '409':
+          $ref: '#/components/responses/ApiError'
+  /v1/account:
+    delete:
+      summary: DELETE /v1/account
+      operationId: delete_v1_account
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/account/export:
+    get:
+      summary: GET /v1/account/export
+      operationId: get_v1_account_export
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/audit-log:
+    get:
+      summary: GET /v1/admin/audit-log
+      operationId: get_v1_admin_audit_log
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/catalog/plans:
+    get:
+      summary: GET /v1/admin/catalog/plans
+      operationId: get_v1_admin_catalog_plans
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/catalog/products:
+    get:
+      summary: GET /v1/admin/catalog/products
+      operationId: get_v1_admin_catalog_products
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+    post:
+      summary: POST /v1/admin/catalog/products
+      operationId: post_v1_admin_catalog_products
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/couriers:
+    get:
+      summary: GET /v1/admin/couriers
+      operationId: get_v1_admin_couriers
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+    post:
+      summary: POST /v1/admin/couriers
+      operationId: post_v1_admin_couriers
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/customers:
+    get:
+      summary: GET /v1/admin/customers
+      operationId: get_v1_admin_customers
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/dashboard:
+    get:
+      summary: GET /v1/admin/dashboard
+      operationId: get_v1_admin_dashboard
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/deliveries:
+    get:
+      summary: GET /v1/admin/deliveries
+      operationId: get_v1_admin_deliveries
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/delivery/tasks:
+    get:
+      summary: GET /v1/admin/delivery/tasks
+      operationId: get_v1_admin_delivery_tasks
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/health:
+    get:
+      summary: GET /v1/admin/health
+      operationId: get_v1_admin_health
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/inventory:
+    get:
+      summary: GET /v1/admin/inventory
+      operationId: get_v1_admin_inventory
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/me:
+    get:
+      summary: GET /v1/admin/me
+      operationId: get_v1_admin_me
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/orders:
+    get:
+      summary: GET /v1/admin/orders
+      operationId: get_v1_admin_orders
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/orders/{param}:
+    get:
+      summary: GET /v1/admin/orders/{param}
+      operationId: get_v1_admin_orders_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/admin/packing:
+    get:
+      summary: GET /v1/admin/packing
+      operationId: get_v1_admin_packing
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/setup/status:
+    get:
+      summary: GET /v1/admin/setup/status
+      operationId: get_v1_admin_setup_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/subscriptions:
+    get:
+      summary: GET /v1/admin/subscriptions
+      operationId: get_v1_admin_subscriptions
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/admin/support/tickets:
+    get:
+      summary: GET /v1/admin/support/tickets
+      operationId: get_v1_admin_support_tickets
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+    post:
+      summary: POST /v1/admin/support/tickets
+      operationId: post_v1_admin_support_tickets
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/support/tickets/{param}:
+    get:
+      summary: GET /v1/admin/support/tickets/{param}
+      operationId: get_v1_admin_support_tickets_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/admin/sync/status:
+    get:
+      summary: GET /v1/admin/sync/status
+      operationId: get_v1_admin_sync_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/app/admin-v2-2-sync/health:
+    get:
+      summary: GET /v1/app/admin-v2-2-sync/health
+      operationId: get_v1_app_admin_v2_2_sync_health
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/app/notifications:
+    get:
+      summary: GET /v1/app/notifications
+      operationId: get_v1_app_notifications
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/app/orders/active:
+    get:
+      summary: GET /v1/app/orders/active
+      operationId: get_v1_app_orders_active
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/app/orders/{param}:
+    get:
+      summary: GET /v1/app/orders/{param}
+      operationId: get_v1_app_orders_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/app/orders/{param}/courier-contact:
+    get:
+      summary: GET /v1/app/orders/{param}/courier-contact
+      operationId: get_v1_app_orders_param_courier_contact
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/app/orders/{param}/timeline:
+    get:
+      summary: GET /v1/app/orders/{param}/timeline
+      operationId: get_v1_app_orders_param_timeline
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/app/subscription:
+    get:
+      summary: GET /v1/app/subscription
+      operationId: get_v1_app_subscription
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/courier/deliveries:
+    get:
+      summary: GET /v1/courier/deliveries
+      operationId: get_v1_courier_deliveries
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/courier/deliveries/{param}:
+    get:
+      summary: GET /v1/courier/deliveries/{param}
+      operationId: get_v1_courier_deliveries_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/courier/me:
+    get:
+      summary: GET /v1/courier/me
+      operationId: get_v1_courier_me
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/payments/methods:
+    get:
+      summary: GET /v1/payments/methods
+      operationId: get_v1_payments_methods
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+  /v1/support/tickets:
+    get:
+      summary: GET /v1/support/tickets
+      operationId: get_v1_support_tickets
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+    post:
+      summary: POST /v1/support/tickets
+      operationId: post_v1_support_tickets
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/support/tickets/{param}:
+    get:
+      summary: GET /v1/support/tickets/{param}
+      operationId: get_v1_support_tickets_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+  /v1/admin/catalog/products/{param}:
+    patch:
+      summary: PATCH /v1/admin/catalog/products/{param}
+      operationId: patch_v1_admin_catalog_products_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/couriers/{param}:
+    patch:
+      summary: PATCH /v1/admin/couriers/{param}
+      operationId: patch_v1_admin_couriers_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/deliveries/{param}/assign-courier:
+    patch:
+      summary: PATCH /v1/admin/deliveries/{param}/assign-courier
+      operationId: patch_v1_admin_deliveries_param_assign_courier
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/deliveries/{param}/status:
+    patch:
+      summary: PATCH /v1/admin/deliveries/{param}/status
+      operationId: patch_v1_admin_deliveries_param_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/delivery/tasks/{param}/status:
+    patch:
+      summary: PATCH /v1/admin/delivery/tasks/{param}/status
+      operationId: patch_v1_admin_delivery_tasks_param_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/inventory/{param}:
+    patch:
+      summary: PATCH /v1/admin/inventory/{param}
+      operationId: patch_v1_admin_inventory_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/orders/{param}/status:
+    patch:
+      summary: PATCH /v1/admin/orders/{param}/status
+      operationId: patch_v1_admin_orders_param_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/packing/{param}/complete:
+    patch:
+      summary: PATCH /v1/admin/packing/{param}/complete
+      operationId: patch_v1_admin_packing_param_complete
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/subscriptions/{param}:
+    patch:
+      summary: PATCH /v1/admin/subscriptions/{param}
+      operationId: patch_v1_admin_subscriptions_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/support/tickets/{param}/assign:
+    patch:
+      summary: PATCH /v1/admin/support/tickets/{param}/assign
+      operationId: patch_v1_admin_support_tickets_param_assign
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/support/tickets/{param}/internal-note:
+    patch:
+      summary: PATCH /v1/admin/support/tickets/{param}/internal-note
+      operationId: patch_v1_admin_support_tickets_param_internal_note
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/support/tickets/{param}/status:
+    patch:
+      summary: PATCH /v1/admin/support/tickets/{param}/status
+      operationId: patch_v1_admin_support_tickets_param_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/courier/deliveries/{param}/status:
+    patch:
+      summary: PATCH /v1/courier/deliveries/{param}/status
+      operationId: patch_v1_courier_deliveries_param_status
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/periods/{param}:
+    patch:
+      summary: PATCH /v1/periods/{param}
+      operationId: patch_v1_periods_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/account/deletion-request:
+    post:
+      summary: POST /v1/account/deletion-request
+      operationId: post_v1_account_deletion_request
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/account/deletion-request/cancel:
+    post:
+      summary: POST /v1/account/deletion-request/cancel
+      operationId: post_v1_account_deletion_request_cancel
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/auth/login:
+    post:
+      summary: POST /v1/admin/auth/login
+      operationId: post_v1_admin_auth_login
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/auth/logout:
+    post:
+      summary: POST /v1/admin/auth/logout
+      operationId: post_v1_admin_auth_logout
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/dev/create-sample-order:
+    post:
+      summary: POST /v1/admin/dev/create-sample-order
+      operationId: post_v1_admin_dev_create_sample_order
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/orders/{param}/admin-note:
+    post:
+      summary: POST /v1/admin/orders/{param}/admin-note
+      operationId: post_v1_admin_orders_param_admin_note
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/orders/{param}/cancel:
+    post:
+      summary: POST /v1/admin/orders/{param}/cancel
+      operationId: post_v1_admin_orders_param_cancel
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/orders/{param}/internal-notes:
+    post:
+      summary: POST /v1/admin/orders/{param}/internal-notes
+      operationId: post_v1_admin_orders_param_internal_notes
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/orders/{param}/payment/confirm:
+    post:
+      summary: POST /v1/admin/orders/{param}/payment/confirm
+      operationId: post_v1_admin_orders_param_payment_confirm
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/admin/support/tickets/{param}/reply:
+    post:
+      summary: POST /v1/admin/support/tickets/{param}/reply
+      operationId: post_v1_admin_support_tickets_param_reply
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/app/notifications/read-all:
+    post:
+      summary: POST /v1/app/notifications/read-all
+      operationId: post_v1_app_notifications_read_all
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/app/notifications/{param}/read:
+    post:
+      summary: POST /v1/app/notifications/{param}/read
+      operationId: post_v1_app_notifications_param_read
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/app/orders/{param}/cancel-request:
+    post:
+      summary: POST /v1/app/orders/{param}/cancel-request
+      operationId: post_v1_app_orders_param_cancel_request
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/app/orders/{param}/courier-message:
+    post:
+      summary: POST /v1/app/orders/{param}/courier-message
+      operationId: post_v1_app_orders_param_courier_message
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/auth/firebase/session:
+    post:
+      summary: POST /v1/auth/firebase/session
+      operationId: post_v1_auth_firebase_session
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/auth/phone/start:
+    post:
+      summary: POST /v1/auth/phone/start
+      operationId: post_v1_auth_phone_start
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/auth/phone/verify:
+    post:
+      summary: POST /v1/auth/phone/verify
+      operationId: post_v1_auth_phone_verify
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/courier/auth/login:
+    post:
+      summary: POST /v1/courier/auth/login
+      operationId: post_v1_courier_auth_login
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/courier/deliveries/{param}/location:
+    post:
+      summary: POST /v1/courier/deliveries/{param}/location
+      operationId: post_v1_courier_deliveries_param_location
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/courier/deliveries/{param}/problem:
+    post:
+      summary: POST /v1/courier/deliveries/{param}/problem
+      operationId: post_v1_courier_deliveries_param_problem
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/delivery-addresses/{param}/set-default:
+    post:
+      summary: POST /v1/delivery-addresses/{param}/set-default
+      operationId: post_v1_delivery_addresses_param_set_default
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/delivery/zones/check:
+    post:
+      summary: POST /v1/delivery/zones/check
+      operationId: post_v1_delivery_zones_check
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/payments/webhooks/{param}:
+    post:
+      summary: POST /v1/payments/webhooks/{param}
+      operationId: post_v1_payments_webhooks_param
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+  /v1/support/tickets/{param}/close:
+    post:
+      summary: POST /v1/support/tickets/{param}/close
+      parameters:
+        - in: path
+          name: param
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Support ticket closed
+
+  /v1/support/tickets/{param}/messages:
+    post:
+      summary: POST /v1/support/tickets/{param}/messages
+      operationId: post_v1_support_tickets_param_messages
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '500':
+          $ref: '#/components/responses/ApiError'
+      security:
+      - bearerAuth: []
+      parameters:
+      - in: path
+        name: param
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
 components:
   securitySchemes:
     bearerAuth:
@@ -671,127 +2624,326 @@ components:
             properties:
               error:
                 type: object
-                required: [code, message]
+                required:
+                - code
+                - message
                 properties:
-                  code: { type: string }
-                  message: { type: string }
+                  code:
+                    type: string
+                  message:
+                    type: string
   schemas:
     LoginRequest:
       type: object
-      required: [email, password]
+      required:
+      - email
+      - password
       properties:
-        email: { type: string, format: email, example: demo@lousa.app }
-        password: { type: string, example: Lousa2026 }
+        email:
+          type: string
+          format: email
+          example: demo@lousa.app
+        password:
+          type: string
+          example: Lousa2026
     LoginResponse:
       type: object
-      required: [user, accessToken, refreshToken, demo]
+      required:
+      - user
+      - accessToken
+      - refreshToken
+      - demo
       properties:
         user:
           type: object
           properties:
-            id: { type: string }
-            email: { type: string, format: email }
-            name: { type: string }
-        accessToken: { type: string }
-        refreshToken: { type: string }
-        demo: { type: boolean, example: true }
+            id:
+              type: string
+            email:
+              type: string
+              format: email
+            name:
+              type: string
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        demo:
+          type: boolean
+          example: true
     PeriodRecordInput:
       type: object
-      required: [startDate]
+      required:
+      - startDate
       properties:
-        id: { type: string }
-        startDate: { type: string, format: date }
-        endDate: { type: string, format: date, nullable: true }
-        confirmed: { type: boolean }
-        flowByDay: { type: object, additionalProperties: { type: string } }
-        painByDay: { type: object, additionalProperties: { type: number } }
-        productsUsedByDay: { type: object, additionalProperties: { type: number } }
-        nightLeakageByDay: { type: object, additionalProperties: { type: boolean } }
+        id:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        confirmed:
+          type: boolean
+        flowByDay:
+          type: object
+          additionalProperties:
+            type: string
+        painByDay:
+          type: object
+          additionalProperties:
+            type: number
+        productsUsedByDay:
+          type: object
+          additionalProperties:
+            type: number
+        nightLeakageByDay:
+          type: object
+          additionalProperties:
+            type: boolean
     PeriodRecord:
       allOf:
-        - $ref: '#/components/schemas/PeriodRecordInput'
-        - type: object
-          required: [id, source, createdAt, updatedAt]
-          properties:
-            source: { type: string, enum: [user, imported, legacy, demo] }
-            needsReview: { type: boolean }
-            createdAt: { type: string, format: date-time }
-            updatedAt: { type: string, format: date-time }
+      - $ref: '#/components/schemas/PeriodRecordInput'
+      - type: object
+        required:
+        - id
+        - source
+        - createdAt
+        - updatedAt
+        properties:
+          source:
+            type: string
+            enum:
+            - user
+            - imported
+            - legacy
+            - demo
+          needsReview:
+            type: boolean
+          createdAt:
+            type: string
+            format: date-time
+          updatedAt:
+            type: string
+            format: date-time
     CyclePrediction:
       type: object
       properties:
-        mostLikelyStart: { type: string, format: date, nullable: true }
-        earliestStart: { type: string, format: date, nullable: true }
-        latestStart: { type: string, format: date, nullable: true }
-        confidence: { type: string, enum: [insufficient, low, medium, high] }
-        confidenceScore: { type: number }
-        reasons: { type: array, items: { type: string } }
-        warnings: { type: array, items: { type: string } }
-        isCalendarEstimateOnly: { type: boolean, example: true }
+        mostLikelyStart:
+          type: string
+          format: date
+          nullable: true
+        earliestStart:
+          type: string
+          format: date
+          nullable: true
+        latestStart:
+          type: string
+          format: date
+          nullable: true
+        confidence:
+          type: string
+          enum:
+          - insufficient
+          - low
+          - medium
+          - high
+        confidenceScore:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        isCalendarEstimateOnly:
+          type: boolean
+          example: true
     CycleObservation:
       type: object
-      required: [date, type]
+      required:
+      - date
+      - type
       properties:
-        id: { type: string }
-        date: { type: string, format: date }
-        type: { type: string, enum: [period_start, period_day, period_end, spotting, no_bleeding] }
-        source: { type: string, enum: [user, imported] }
-        periodRecordId: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+        type:
+          type: string
+          enum:
+          - period_start
+          - period_day
+          - period_end
+          - spotting
+          - no_bleeding
+        source:
+          type: string
+          enum:
+          - user
+          - imported
+        periodRecordId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     DeliveryAddress:
       type: object
-      required: [street, house, latitude, longitude, formattedAddress]
+      required:
+      - street
+      - house
+      - latitude
+      - longitude
+      - formattedAddress
       properties:
-        id: { type: string }
-        label: { type: string, enum: [home, work, other] }
-        addressType: { type: string, enum: [apartment, private_house, office, workplace, hotel, other] }
-        handoffType: { type: string, enum: [hand_to_recipient, leave_at_door, leave_with_reception, leave_with_security, call_on_arrival, other] }
-        country: { type: string }
-        region: { type: string }
-        city: { type: string }
-        district: { type: string }
-        street: { type: string }
-        house: { type: string }
-        entrance: { type: string }
-        floor: { type: string }
-        apartment: { type: string }
-        postalCode: { type: string }
-        intercomCode: { type: string }
-        instructions: { type: string }
-        companyName: { type: string }
-        contactPerson: { type: string }
-        officeNumber: { type: string }
-        hotelName: { type: string }
-        roomNumber: { type: string }
-        landmark: { type: string }
-        gateDetails: { type: string }
-        leaveAtDoorLocation: { type: string }
-        callOnArrival: { type: boolean }
-        doNotKnock: { type: boolean }
-        photoConfirmation: { type: boolean }
-        recipientName: { type: string }
-        phone: { type: string }
-        latitude: { type: number }
-        longitude: { type: number }
-        formattedAddress: { type: string }
-        provider: { type: string, enum: [google, maptiler, device, manual] }
-        providerPlaceId: { type: string, nullable: true }
-        deliveryZoneId: { type: string, nullable: true }
-        deliveryFeeMinor: { type: integer, nullable: true }
-        estimatedMinutes: { type: integer, nullable: true }
-        validationStatus: { type: string, enum: [unverified, verified, outside_zone] }
-        deliveryIncludedInPlan: { type: boolean, example: true }
-        planCode: { type: string, nullable: true }
-        zoneVerifiedAt: { type: string, format: date-time, nullable: true }
-        syncStatus: { type: string, enum: [synced, pending, failed] }
-        isDefault: { type: boolean }
+        id:
+          type: string
+        label:
+          type: string
+          enum:
+          - home
+          - work
+          - other
+        addressType:
+          type: string
+          enum:
+          - apartment
+          - private_house
+          - office
+          - workplace
+          - hotel
+          - other
+        handoffType:
+          type: string
+          enum:
+          - hand_to_recipient
+          - leave_at_door
+          - leave_with_reception
+          - leave_with_security
+          - call_on_arrival
+          - other
+        country:
+          type: string
+        region:
+          type: string
+        city:
+          type: string
+        district:
+          type: string
+        street:
+          type: string
+        house:
+          type: string
+        entrance:
+          type: string
+        floor:
+          type: string
+        apartment:
+          type: string
+        postalCode:
+          type: string
+        intercomCode:
+          type: string
+        instructions:
+          type: string
+        companyName:
+          type: string
+        contactPerson:
+          type: string
+        officeNumber:
+          type: string
+        hotelName:
+          type: string
+        roomNumber:
+          type: string
+        landmark:
+          type: string
+        gateDetails:
+          type: string
+        leaveAtDoorLocation:
+          type: string
+        callOnArrival:
+          type: boolean
+        doNotKnock:
+          type: boolean
+        photoConfirmation:
+          type: boolean
+        recipientName:
+          type: string
+        phone:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        formattedAddress:
+          type: string
+        provider:
+          type: string
+          enum:
+          - google
+          - maptiler
+          - device
+          - manual
+        providerPlaceId:
+          type: string
+          nullable: true
+        deliveryZoneId:
+          type: string
+          nullable: true
+        deliveryFeeMinor:
+          type: integer
+          nullable: true
+        estimatedMinutes:
+          type: integer
+          nullable: true
+        validationStatus:
+          type: string
+          enum:
+          - unverified
+          - verified
+          - outside_zone
+        deliveryIncludedInPlan:
+          type: boolean
+          example: true
+        planCode:
+          type: string
+          nullable: true
+        zoneVerifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+        syncStatus:
+          type: string
+          enum:
+          - synced
+          - pending
+          - failed
+        isDefault:
+          type: boolean
     PaymentIntent:
       type: object
       properties:
-        id: { type: string }
-        orderId: { type: string }
-        amountMinor: { type: integer }
-        currency: { type: string, example: AMD }
-        status: { type: string }
-        demo: { type: boolean, example: true }
+        id:
+          type: string
+        orderId:
+          type: string
+        amountMinor:
+          type: integer
+        currency:
+          type: string
+          example: AMD
+        status:
+          type: string
+        demo:
+          type: boolean
+          example: true

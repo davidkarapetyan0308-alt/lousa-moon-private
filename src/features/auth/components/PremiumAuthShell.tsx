@@ -85,8 +85,8 @@ const styles = StyleSheet.create({
   },
   welcome: {
     flexGrow: 1,
-    justifyContent: 'flex-start',
-    paddingTop: 8,
+    justifyContent: 'center',
+    paddingTop: 16,
   },
   form: {
     flexGrow: 0,

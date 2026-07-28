@@ -1,0 +1,10 @@
+$ npm run android:apk:release
+
+> lousa-moon@1.18.22 android:apk:release
+> bash scripts/build-release-apk.sh
+
+BUILD ENV VALIDATION FAILED (production)
+- EXPO_PUBLIC_LOUSA_API_URL is required.
+- PUBLIC_API_URL is required.
+- EXPO_PUBLIC_FIREBASE_AUTH_ACTION_URL is required.
+EXIT=1
