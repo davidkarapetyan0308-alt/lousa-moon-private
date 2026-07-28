@@ -74,7 +74,19 @@ const result = spawnSync(prismaBin, ['db', 'execute', '--schema', schemaPath, '-
   env: process.env,
   input: sql,
   encoding: 'utf8',
+  timeout: 30000,
+  killSignal: 'SIGTERM',
 });
+
+if (result.error) {
+  console.error(`[LOUSA] Auth database schema fallback process failed: ${result.error.message}`);
+  process.exit(1);
+}
+
+if (result.signal) {
+  console.error(`[LOUSA] Auth database schema fallback timed out or was terminated (${result.signal}).`);
+  process.exit(1);
+}
 
 if (result.stdout) process.stdout.write(result.stdout);
 if (result.stderr) process.stderr.write(result.stderr);

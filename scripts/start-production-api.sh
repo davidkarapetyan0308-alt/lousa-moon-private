@@ -43,7 +43,9 @@ fi
 
 # Auth schema fallback is idempotent and protects older QA databases, but any
 # failure is fatal outside local development so /ready cannot lie about startup.
-if ! node ./scripts/ensure-auth-db-schema.js; then
+# Use the session pooler for DDL as well. DATABASE_URL may intentionally point
+# at Supabase's transaction pooler, which can hang on Prisma db execute.
+if ! DATABASE_URL="${MIGRATION_DATABASE_URL:-${DATABASE_URL:-}}" node ./scripts/ensure-auth-db-schema.js; then
   echo "[LOUSA] Auth schema validation/fallback failed." >&2
   [ "$APP_ENV_VALUE" = "development" ] || [ "$APP_ENV_VALUE" = "test" ] || exit 1
 fi
