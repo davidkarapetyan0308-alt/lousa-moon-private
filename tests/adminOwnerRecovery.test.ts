@@ -40,6 +40,7 @@ describe('admin owner recovery', () => {
     expect(recoverySecretMatches('secret', 'secret')).toBe(true);
     expect(recoverySecretMatches('wrong', 'secret')).toBe(false);
     expect(parseOwnerRecoveryPayload(validPayload)).toEqual(validPayload);
+    expect(parseOwnerRecoveryPayload({ ...validPayload, email: '' })).toEqual({ ...validPayload, email: null });
     expect(() => parseOwnerRecoveryPayload({ ...validPayload, role: 'OWNER' })).toThrow('Only email');
     expect(() => parseOwnerRecoveryPayload({ ...validPayload, password: 'weak' })).toThrow('security requirements');
   });
@@ -53,6 +54,14 @@ describe('admin owner recovery', () => {
     expect(store.audit[0]).toMatchObject({ action: 'ADMIN_OWNER_PASSWORD_RECOVERED', metadata: { source: 'protected_one_time_recovery' } });
     expect(JSON.stringify(store.audit[0])).not.toContain(validPayload.password);
     expect(JSON.stringify(store.audit[0])).not.toContain(validPayload.email);
+  });
+
+  test('allows a blank email only when there is exactly one owner', async () => {
+    const payload = { ...validPayload, email: null };
+    await expect(recoverOwnerPassword(recoveryStore({ ownerEmail: 'unknown@lousa.app' }), payload, async () => 'hash'))
+      .resolves.toEqual({ email: 'unknown@lousa.app', role: 'OWNER' });
+    await expect(recoverOwnerPassword(recoveryStore({ ownerCount: 2 }), payload, async () => 'hash'))
+      .rejects.toMatchObject<Partial<OwnerRecoveryError>>({ code: 'OWNER_RECOVERY_NOT_ALLOWED' });
   });
 
   test('refuses a non-matching owner, multiple owners, and a repeated recovery', async () => {

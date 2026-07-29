@@ -30,7 +30,7 @@ Immediately delete both recovery variables from Render and redeploy. The endpoin
 
 - Exact JSON fields only: `email`, `password`.
 - Requires 14+ characters with upper-case, lower-case, digit, and special character.
-- Requires exactly one existing `OWNER` matching the supplied email.
+- Requires exactly one existing `OWNER`. Supply that owner's email whenever known. In an emergency it may be an empty string (`"email":""`), but only the single existing owner can then be recovered.
 - Uses a PostgreSQL advisory lock, 3 attempts per IP per 15 minutes, and constant-time secret comparison.
 - Revokes all prior owner sessions.
 - Writes a non-sensitive audit record and permits no second recovery.

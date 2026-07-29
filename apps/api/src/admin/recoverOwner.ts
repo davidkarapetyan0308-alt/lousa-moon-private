@@ -3,7 +3,9 @@ import { timingSafeEqual } from 'node:crypto';
 export const OWNER_RECOVERY_LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtext('lousa_admin_owner_recovery'))";
 
 export type OwnerRecoveryPayload = {
-  email: string;
+  // A blank email is allowed only for the protected emergency flow. The
+  // transaction still requires exactly one OWNER before any state can change.
+  email: string | null;
   password: string;
 };
 
@@ -35,15 +37,15 @@ export function parseOwnerRecoveryPayload(input: unknown): OwnerRecoveryPayload 
     throw new OwnerRecoveryError('OWNER_RECOVERY_PAYLOAD_INVALID', 'Only email and password are accepted.');
   }
 
-  const email = typeof record.email === 'string' ? record.email.trim().toLowerCase() : '';
+  const emailInput = typeof record.email === 'string' ? record.email.trim().toLowerCase() : '';
   const password = typeof record.password === 'string' ? record.password : '';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+  if (emailInput && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput) || emailInput.length > 254)) {
     throw new OwnerRecoveryError('OWNER_RECOVERY_EMAIL_INVALID', 'Email is invalid.');
   }
   if (password.length < 14 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
     throw new OwnerRecoveryError('OWNER_RECOVERY_PASSWORD_WEAK', 'Password does not meet the security requirements.');
   }
-  return { email, password };
+  return { email: emailInput || null, password };
 }
 
 export async function recoverOwnerPassword(
@@ -55,7 +57,7 @@ export async function recoverOwnerPassword(
     // This lock makes the permanent one-time check safe under concurrent requests.
     await transaction.$executeRawUnsafe(OWNER_RECOVERY_LOCK_SQL);
     const owners = await transaction.adminUser.findMany({ where: { role: 'OWNER' }, select: { id: true, email: true, role: true } });
-    if (owners.length !== 1 || owners[0].email !== payload.email) {
+    if (owners.length !== 1 || (payload.email && owners[0].email !== payload.email)) {
       throw new OwnerRecoveryError('OWNER_RECOVERY_NOT_ALLOWED', 'Owner recovery is not available.');
     }
     const owner = owners[0];
