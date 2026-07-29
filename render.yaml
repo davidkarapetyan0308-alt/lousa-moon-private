@@ -40,6 +40,10 @@ services:
         value: lousa-moon
       - key: FIREBASE_SERVICE_ACCOUNT_JSON
         sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
       - key: ALLOW_FIREBASE_REST_FALLBACK
         value: "false"
       - key: EMAIL_PROVIDER
