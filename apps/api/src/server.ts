@@ -2450,14 +2450,17 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
 
   if (method === 'GET' && pathname === '/v1/admin/couriers') {
     requireRole(admin, ['OWNER','ADMIN','COURIER_MANAGER','READONLY']);
-    const items = await (prisma as any).courier.findMany({ orderBy: { createdAt: 'desc' }, include: { assignments: true } });
+    const items = await (prisma as any).courier.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { assignments: true, adminUser: { select: { email: true } } },
+    });
     const enriched = await Promise.all(items.map(async (c: any) => {
       const [shift, location] = await Promise.all([
         (prisma as any).courierShift.findFirst({ where: { courierId: c.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } }),
         (prisma as any).courierLocation.findFirst({ where: { courierId: c.id }, orderBy: { recordedAt: 'desc' } }),
       ]);
       return {
-        id: c.id, adminUserId: c.adminUserId, name: c.name, phone: c.phone, isActive: c.isActive, assignmentsCount: c.assignments?.length || 0,
+        id: c.id, adminUserId: c.adminUserId, email: c.adminUser?.email || null, name: c.name, phone: c.phone, isActive: c.isActive, assignmentsCount: c.assignments?.length || 0,
         shiftStatus: shift ? 'OPEN' : 'CLOSED', shiftOpenedAt: shift?.startedAt?.toISOString?.() || null, shiftClosedAt: shift?.endedAt?.toISOString?.() || null,
         lastLocation: location ? { latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy, heading: location.heading, recordedAt: location.recordedAt?.toISOString?.() || null } : null,
         latitude: location?.latitude ?? null, longitude: location?.longitude ?? null, heading: location?.heading ?? null,
