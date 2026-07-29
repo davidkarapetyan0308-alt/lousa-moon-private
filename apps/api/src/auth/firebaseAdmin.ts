@@ -76,7 +76,10 @@ async function verifyFirebaseIdTokenViaRest(
 }
 
 function normalizePrivateKey(value: string) {
-  return value.replace(/\\n/g, '\n');
+  const raw = value.startsWith('base64:')
+    ? Buffer.from(value.slice('base64:'.length), 'base64').toString('utf8')
+    : value;
+  return raw.replace(/\\n/g, '\n');
 }
 
 function parseServiceAccountSecret(value: string) {
@@ -99,8 +102,13 @@ function serviceAccountFromEnv(env: ApiEnv) {
         clientEmail: parsed.client_email || parsed.clientEmail,
         privateKey: normalizePrivateKey(parsed.private_key || parsed.privateKey || ''),
       };
-    } catch {
-      throw new FirebaseAdminNotConfiguredError('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.');
+    } catch (error) {
+      // Some hosting dashboards can preserve an older malformed JSON secret.
+      // A complete pair of explicit credentials remains valid and lets us
+      // recover without weakening token verification or taking the API down.
+      if (!env.firebaseProjectId || !env.firebaseClientEmail || !env.firebasePrivateKey) {
+        throw new FirebaseAdminNotConfiguredError('FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON.');
+      }
     }
   }
   if (!env.firebaseProjectId || !env.firebaseClientEmail || !env.firebasePrivateKey) {
