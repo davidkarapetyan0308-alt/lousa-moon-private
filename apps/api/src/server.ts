@@ -470,14 +470,25 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
       });
       let user = identity?.user || null;
       let isNewUser = false;
+      let migratedLegacyAccount = false;
 
-      // Do not silently merge a Firebase identity into a legacy LOUSA account
-      // based only on matching email/phone. The user must authenticate with the
-      // original method first and explicitly link providers.
+      // Firebase has verified ownership of this exact email. It is safe to link
+      // an existing LOUSA profile here, but never infer ownership from a phone.
       if (!user && email) {
         const emailOwner = await tx.user.findUnique({ where: { email } });
         if (emailOwner) {
-          throw new ApiError(409, 'AUTH_ACCOUNT_LINK_REQUIRED', 'An account with this email already exists. Sign in with the original method to link Google.');
+          if (!decoded.email_verified || emailOwner.deletedAt || emailOwner.status === 'deleted') {
+            throw new ApiError(409, 'AUTH_ACCOUNT_LINK_REQUIRED', 'This LOUSA account cannot be linked to the current Firebase identity.');
+          }
+          const linkedFirebaseIdentity = await tx.authIdentity.findFirst({
+            where: { userId: emailOwner.id, provider: 'firebase' },
+            select: { providerSubject: true },
+          });
+          if (linkedFirebaseIdentity && linkedFirebaseIdentity.providerSubject !== firebaseUid) {
+            throw new ApiError(409, 'AUTH_ACCOUNT_LINK_REQUIRED', 'This LOUSA account is already linked to another Firebase identity.');
+          }
+          user = emailOwner;
+          migratedLegacyAccount = true;
         }
       }
       if (!user && phone) {
@@ -524,10 +535,27 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
         update: { providerEmail: email || null, userId: user.id },
         create: { userId: user.id, provider: `firebase:${provider}`, providerSubject: firebaseUid, providerEmail: email || null },
       });
-      return { user, isNewUser };
+      if (migratedLegacyAccount) {
+        await tx.auditLog.create({
+          data: {
+            actorId: user.id,
+            actorRole: 'USER',
+            action: 'FIREBASE_IDENTITY_LINKED_BY_VERIFIED_EMAIL_MIGRATION',
+            entityType: 'User',
+            entityId: user.id,
+            metadata: { provider, emailVerified: true },
+          },
+        });
+      }
+      return { user, isNewUser, migratedLegacyAccount };
     });
 
-    return sessionPayload(result.user, req, { isNewUser: result.isNewUser, firebaseUid, authProvider: 'firebase' });
+    return sessionPayload(result.user, req, {
+      isNewUser: result.isNewUser,
+      firebaseUid,
+      authProvider: 'firebase',
+      migratedLegacyAccount: result.migratedLegacyAccount,
+    });
   } catch (error) {
     if (error instanceof ApiError) throw error;
     console.error('[firebase-auth] session database persistence failed', error);
