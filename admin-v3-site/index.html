@@ -2017,6 +2017,7 @@
         <div class="courier-actions">
           ${phone ? `<a class="btn secondary" href="tel:${attr(phone)}">Позвонить</a>` : '<button class="btn secondary" disabled>Нет телефона</button>'}
           <button class="btn secondary" onclick="messageCourier('${attr(courier.id)}')">Сообщение</button>
+          ${email ? `<button class="btn secondary" onclick="resetCourierPassword('${attr(courier.id)}')">Сбросить пароль</button>` : ''}
           ${mapLink(coords, 'Карта') || '<button class="btn secondary" disabled>Нет GPS</button>'}
           <button class="btn secondary" onclick="toggleCourier('${attr(courier.id)}', ${courier.isActive === false})">${courier.isActive === false ? 'Включить' : 'Отключить'}</button>
         </div>
@@ -2144,6 +2145,15 @@
         toast('Аккаунт курьера создан.');
         await dispatch();
       }, 'Создать аккаунт');
+    }
+    function resetCourierPassword(id) {
+      const courier = (state.cache.couriers || []).find(x => String(x.id) === String(id));
+      modal(`Новый пароль: ${courier?.name || 'курьер'}`, `<div class="notice info">Новый пароль сразу заменит предыдущий. Сообщите его курьеру защищённым способом.</div><label class="form-field">Новый пароль<input id="courierNewPassword" type="password" autocomplete="new-password" /></label>`, async root => {
+        const temporaryPassword = root.querySelector('#courierNewPassword').value;
+        if (!temporaryPassword || temporaryPassword.length < 10) throw new Error('Новый пароль должен быть не короче 10 символов.');
+        await api(`/v1/admin/couriers/${encodeURIComponent(id)}/credentials`, { method: 'PATCH', body: JSON.stringify({ temporaryPassword }) });
+        toast('Пароль курьера обновлён.');
+      }, 'Сохранить пароль');
     }
     function messageCourier(id) {
       const courier = (state.cache.couriers || []).find(x => String(x.id) === String(id));

@@ -2499,6 +2499,29 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     return json(req, res, 200, { courier });
   }
 
+  const courierCredentialsMatch = pathname.match(/^\/v1\/admin\/couriers\/([^/]+)\/credentials$/);
+  if (courierCredentialsMatch && method === 'PATCH') {
+    requireRole(admin, ['OWNER','ADMIN','COURIER_MANAGER']);
+    const body = await readJson(req);
+    const temporaryPassword = str(body.temporaryPassword, 200);
+    if (temporaryPassword.length < 10) {
+      throw new ApiError(400, 'COURIER_PASSWORD_INVALID', 'Новый пароль курьера должен быть не короче 10 символов.');
+    }
+    const courier = await (prisma as any).courier.findUnique({
+      where: { id: courierCredentialsMatch[1] },
+      include: { adminUser: { select: { id: true, email: true } } },
+    });
+    if (!courier?.adminUser) {
+      throw new ApiError(409, 'COURIER_ACCOUNT_MISSING', 'У этого курьера ещё нет аккаунта для входа. Создайте аккаунт курьера через соответствующую кнопку.');
+    }
+    const account = await (prisma as any).adminUser.update({
+      where: { id: courier.adminUser.id },
+      data: { passwordHash: await hashSecret(temporaryPassword), isActive: true },
+    });
+    await adminAudit(admin, 'COURIER_PASSWORD_RESET', 'Courier', courier.id, { email: account.email });
+    return json(req, res, 200, { ok: true, email: account.email });
+  }
+
   if (method === 'GET' && pathname === '/v1/admin/deliveries') {
     requireRole(admin, ['OWNER','ADMIN','COURIER_MANAGER','COURIER','READONLY']);
     const courier = admin.role === 'COURIER' ? await courierFromAdmin(admin) : null;
