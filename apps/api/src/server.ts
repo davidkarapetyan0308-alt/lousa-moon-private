@@ -291,6 +291,50 @@ async function readJson(req: IncomingMessage): Promise<any> {
   });
 }
 
+async function readBinary(req: IncomingMessage, limitBytes = 2 * 1024 * 1024): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  return new Promise((resolve, reject) => {
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > limitBytes) {
+        reject(new ApiError(413, 'PHOTO_TOO_LARGE', 'Фотография больше 2 МБ. Сделайте снимок ещё раз.'));
+        req.destroy();
+        return;
+      }
+      chunks.push(Buffer.from(chunk));
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+function extractMultipartPhoto(raw: Buffer, contentType: string) {
+  const boundary = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType)?.[1]
+    || /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType)?.[2];
+  if (!boundary) throw new ApiError(400, 'PHOTO_MULTIPART_INVALID', 'Не удалось прочитать фотографию.');
+  const marker = Buffer.from(`--${boundary}`);
+  let cursor = raw.indexOf(marker) + marker.length;
+  while (cursor >= marker.length) {
+    const next = raw.indexOf(marker, cursor);
+    if (next < 0) break;
+    const part = raw.subarray(cursor, next);
+    cursor = next + marker.length;
+    const headerEnd = part.indexOf(Buffer.from('\r\n\r\n'));
+    if (headerEnd < 0) continue;
+    const headers = part.subarray(0, headerEnd).toString('utf8');
+    if (!/name="photo"/i.test(headers)) continue;
+    const valueEnd = part.length >= 2 && part.subarray(part.length - 2).toString('utf8') === '\r\n' ? part.length - 2 : part.length;
+    const bytes = part.subarray(headerEnd + 4, valueEnd);
+    if (!bytes.length) throw new ApiError(400, 'PHOTO_EMPTY', 'Фотография пуста.');
+    if (!/^image\/(jpeg|jpg|png|webp)$/i.test(/content-type:\s*([^\r\n]+)/i.exec(headers)?.[1] || '')) {
+      throw new ApiError(415, 'PHOTO_TYPE_INVALID', 'Поддерживаются JPEG, PNG и WebP.');
+    }
+    return { bytes, contentType: /content-type:\s*([^\r\n]+)/i.exec(headers)?.[1] || 'image/jpeg' };
+  }
+  throw new ApiError(400, 'PHOTO_MISSING', 'Не найдена фотография подтверждения.');
+}
+
 async function readRawBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -1284,6 +1328,87 @@ async function courierFromAdmin(admin: AdminContext) {
   return (prisma as any).courier.findFirst({ where: { OR: [{ adminUserId: admin.id }, { name: admin.name }] } }).catch(() => null);
 }
 
+function courierShiftDto(shift: any) {
+  if (!shift) return null;
+  return {
+    id: shift.id,
+    status: shift.status === 'ACTIVE' ? 'ACTIVE' : 'ENDED',
+    startedAt: shift.startedAt?.toISOString?.() || String(shift.startedAt || ''),
+    endedAt: shift.endedAt?.toISOString?.() || null,
+  };
+}
+
+function courierSupportTicketDto(ticket: any) {
+  return {
+    id: ticket.id,
+    deliveryId: ticket.orderId || null,
+    subject: ticket.subject,
+    category: ticket.category || 'GENERAL',
+    priority: ticket.priority || 'NORMAL',
+    status: ticket.status || 'OPEN',
+    createdAt: ticket.createdAt?.toISOString?.() || String(ticket.createdAt || ''),
+    updatedAt: ticket.updatedAt?.toISOString?.() || String(ticket.updatedAt || ''),
+    messages: (ticket.messages || []).filter((message: any) => message.visibility !== 'INTERNAL').map((message: any) => ({
+      id: message.id,
+      ticketId: ticket.id,
+      sender: message.senderType === 'ADMIN' ? 'ADMIN' : 'COURIER',
+      body: message.safeBody || message.body,
+      createdAt: message.createdAt?.toISOString?.() || String(message.createdAt || ''),
+    })),
+  };
+}
+
+function validCourierCoordinate(value: unknown, min: number, max: number) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : null;
+}
+
+async function requireCourierProfile(admin: AdminContext) {
+  const courier = await courierFromAdmin(admin);
+  if (!courier?.isActive) throw new ApiError(403, 'COURIER_PROFILE_REQUIRED', 'Для работы нужен активный профиль курьера.');
+  return courier;
+}
+
+async function taskForCourier(taskId: string, courier: any) {
+  const task = await (prisma as any).deliveryTask.findFirst({ where: { id: taskId, courierId: courier.id }, include: { order: { include: { deliveryAddress: true } } } });
+  if (!task) throw new ApiError(404, 'DELIVERY_NOT_FOUND', 'Доставка не найдена.');
+  return task;
+}
+
+async function recordCourierLocation(courier: any, body: any, fallbackTaskId?: string | null) {
+  const latitude = validCourierCoordinate(body.latitude, -90, 90);
+  const longitude = validCourierCoordinate(body.longitude, -180, 180);
+  if (latitude === null || longitude === null) throw new ApiError(400, 'LOCATION_INVALID', 'Передайте корректные координаты GPS.');
+  const requestedShiftId = optionalStr(body.shiftId, 80);
+  const shift = requestedShiftId
+    ? await (prisma as any).courierShift.findFirst({ where: { id: requestedShiftId, courierId: courier.id, status: 'ACTIVE' } })
+    : await (prisma as any).courierShift.findFirst({ where: { courierId: courier.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } });
+  const requestedTaskId = optionalStr(body.deliveryId, 80) || fallbackTaskId || null;
+  if (requestedTaskId) await taskForCourier(requestedTaskId, courier);
+  const recordedAt = body.recordedAt ? new Date(body.recordedAt) : now();
+  const safeRecordedAt = Number.isNaN(recordedAt.valueOf()) ? now() : recordedAt;
+  const location = await (prisma as any).courierLocation.create({ data: {
+    courierId: courier.id,
+    shiftId: shift?.id || null,
+    deliveryTaskId: requestedTaskId,
+    latitude,
+    longitude,
+    accuracy: validCourierCoordinate(body.accuracyMeters ?? body.accuracy, 0, 10_000),
+    heading: validCourierCoordinate(body.heading, 0, 360),
+    speed: validCourierCoordinate(body.speedMetersPerSecond ?? body.speed, 0, 150),
+    recordedAt: safeRecordedAt,
+  } });
+  return location;
+}
+
+async function markCourierDeliveryDelivered(task: any, courierAdmin: AdminContext, reason: string) {
+  const updated = await (prisma as any).deliveryTask.update({ where: { id: task.id }, data: { status: 'DELIVERED' } });
+  await (prisma as any).order.update({ where: { id: task.orderId }, data: { status: 'DELIVERED' } });
+  await createPublicOrderEvent(task.orderId, 'DELIVERED', reason);
+  await adminAudit(courierAdmin, 'COURIER_DELIVERY_COMPLETED', 'DeliveryTask', task.id, { reason });
+  return updated;
+}
+
 async function createPublicOrderEvent(orderId: string, status: string, internalNote?: string) {
   const copy = publicOrderText[status] || { title: `Статус обновлён: ${status}`, body: '' };
   return (prisma as any).orderEvent.create({ data: { orderId, type: status, publicTitleRu: copy.title, publicBodyRu: copy.body, publicTitle: copy.title, publicBody: copy.body, internalTitle: `Internal ${status}`, internalBody: internalNote || null, internalNote: internalNote || null, visibleToCustomer: true } }).catch(() => null);
@@ -2080,6 +2205,55 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     return json(req, res, 200, supportTicketDto(updated, true));
   }
 
+  if (method === 'GET' && pathname === '/v1/admin/courier-support/tickets') {
+    requireRole(admin, ['OWNER','ADMIN','SUPPORT','COURIER_MANAGER','READONLY']);
+    const tickets = await (prisma as any).supportTicket.findMany({
+      where: { contactChannel: 'COURIER_APP' }, take: 100, orderBy: { updatedAt: 'desc' }, include: { messages: { orderBy: { createdAt: 'asc' } } },
+    });
+    const courierIds = [...new Set(tickets.map((ticket: any) => ticket.courierId).filter(Boolean))];
+    const couriers = courierIds.length ? await (prisma as any).courier.findMany({ where: { id: { in: courierIds } } }) : [];
+    const byId = new Map<string, any>(couriers.map((courier: any) => [courier.id, courier]));
+    return json(req, res, 200, { items: tickets.map((ticket: any) => {
+      const ticketCourier = byId.get(ticket.courierId);
+      return { ...courierSupportTicketDto(ticket), courier: ticketCourier ? { id: ticketCourier.id, name: ticketCourier.name, phone: ticketCourier.phone } : null };
+    }) });
+  }
+
+  const adminCourierTicketMatch = pathname.match(/^\/v1\/admin\/courier-support\/tickets\/([^/]+)$/);
+  if (adminCourierTicketMatch && method === 'GET') {
+    requireRole(admin, ['OWNER','ADMIN','SUPPORT','COURIER_MANAGER','READONLY']);
+    const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: adminCourierTicketMatch[1], contactChannel: 'COURIER_APP' }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+    if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение курьера не найдено.');
+    const courier = ticket.courierId ? await (prisma as any).courier.findUnique({ where: { id: ticket.courierId } }) : null;
+    return json(req, res, 200, { ticket: { ...courierSupportTicketDto(ticket), courier: courier ? { id: courier.id, name: courier.name, phone: courier.phone } : null } });
+  }
+
+  const adminCourierTicketReplyMatch = pathname.match(/^\/v1\/admin\/courier-support\/tickets\/([^/]+)\/reply$/);
+  if (adminCourierTicketReplyMatch && method === 'POST') {
+    requireRole(admin, ['OWNER','ADMIN','SUPPORT','COURIER_MANAGER']);
+    const body = await readJson(req);
+    const message = redactSupportText(body.message, 2000);
+    if (!message) throw new ApiError(400, 'SUPPORT_MESSAGE_REQUIRED', 'Сообщение не может быть пустым.');
+    const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: adminCourierTicketReplyMatch[1], contactChannel: 'COURIER_APP' } });
+    if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение курьера не найдено.');
+    await (prisma as any).supportMessage.create({ data: { ticketId: ticket.id, senderType: 'ADMIN', senderAdminUserId: admin.id, body: message, safeBody: message, visibility: 'SUPPORT_AND_COURIER' } });
+    const updated = await (prisma as any).supportTicket.update({ where: { id: ticket.id }, data: { status: 'PENDING_CUSTOMER', lastMessageAt: now(), updatedAt: now() }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+    await adminAudit(admin, 'COURIER_SUPPORT_TICKET_REPLIED', 'SupportTicket', ticket.id);
+    return json(req, res, 200, { ticket: courierSupportTicketDto(updated) });
+  }
+
+  const adminCourierTicketStatusMatch = pathname.match(/^\/v1\/admin\/courier-support\/tickets\/([^/]+)\/status$/);
+  if (adminCourierTicketStatusMatch && method === 'PATCH') {
+    requireRole(admin, ['OWNER','ADMIN','SUPPORT','COURIER_MANAGER']);
+    const body = await readJson(req);
+    const status = upperEnum(body.status, ['OPEN','IN_PROGRESS','RESOLVED','CLOSED'] as const, 'SUPPORT_STATUS_INVALID');
+    const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: adminCourierTicketStatusMatch[1], contactChannel: 'COURIER_APP' } });
+    if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение курьера не найдено.');
+    const updated = await (prisma as any).supportTicket.update({ where: { id: ticket.id }, data: { status, closedAt: ['RESOLVED','CLOSED'].includes(status) ? now() : null, updatedAt: now() }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+    await adminAudit(admin, 'COURIER_SUPPORT_TICKET_STATUS_CHANGED', 'SupportTicket', ticket.id, { status });
+    return json(req, res, 200, { ticket: courierSupportTicketDto(updated) });
+  }
+
   if (method === 'GET' && pathname === '/v1/admin/catalog/products') {
     requireRole(admin, ['OWNER','ADMIN','CATALOG_MANAGER','READONLY']);
     const items = await (prisma as any).productCatalogItem.findMany({ orderBy: { createdAt: 'desc' }, include: { prices: { take: 1, orderBy: { validFrom: 'desc' } }, inventory: true } });
@@ -2277,7 +2451,20 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
   if (method === 'GET' && pathname === '/v1/admin/couriers') {
     requireRole(admin, ['OWNER','ADMIN','COURIER_MANAGER','READONLY']);
     const items = await (prisma as any).courier.findMany({ orderBy: { createdAt: 'desc' }, include: { assignments: true } });
-    return json(req, res, 200, { items: items.map((c: any) => ({ id: c.id, adminUserId: c.adminUserId, name: c.name, phone: c.phone, isActive: c.isActive, assignmentsCount: c.assignments?.length || 0, createdAt: c.createdAt?.toISOString?.() })) });
+    const enriched = await Promise.all(items.map(async (c: any) => {
+      const [shift, location] = await Promise.all([
+        (prisma as any).courierShift.findFirst({ where: { courierId: c.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } }),
+        (prisma as any).courierLocation.findFirst({ where: { courierId: c.id }, orderBy: { recordedAt: 'desc' } }),
+      ]);
+      return {
+        id: c.id, adminUserId: c.adminUserId, name: c.name, phone: c.phone, isActive: c.isActive, assignmentsCount: c.assignments?.length || 0,
+        shiftStatus: shift ? 'OPEN' : 'CLOSED', shiftOpenedAt: shift?.startedAt?.toISOString?.() || null, shiftClosedAt: shift?.endedAt?.toISOString?.() || null,
+        lastLocation: location ? { latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy, heading: location.heading, recordedAt: location.recordedAt?.toISOString?.() || null } : null,
+        latitude: location?.latitude ?? null, longitude: location?.longitude ?? null, heading: location?.heading ?? null,
+        gpsStatus: location ? 'LIVE' : 'UNAVAILABLE', createdAt: c.createdAt?.toISOString?.(),
+      };
+    }));
+    return json(req, res, 200, { items: enriched });
   }
 
   if (method === 'POST' && pathname === '/v1/admin/couriers') {
@@ -2285,7 +2472,17 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     const body = await readJson(req);
     const name = str(body.name, 120);
     if (!name) throw new ApiError(400, 'COURIER_NAME_REQUIRED', 'Имя курьера обязательно.');
-    const courier = await (prisma as any).courier.create({ data: { name, phone: optionalStr(body.phone, 40), adminUserId: optionalStr(body.adminUserId, 80), isActive: body.isActive !== false } });
+    const email = lowerEmail(body.email);
+    const temporaryPassword = str(body.temporaryPassword, 200);
+    let adminUserId = optionalStr(body.adminUserId, 80);
+    if (email || temporaryPassword) {
+      if (!email || temporaryPassword.length < 10) throw new ApiError(400, 'COURIER_ACCOUNT_INVALID', 'Для аккаунта курьера нужны email и временный пароль не короче 10 символов.');
+      const existing = await (prisma as any).adminUser.findUnique({ where: { email } });
+      if (existing) throw new ApiError(409, 'COURIER_EMAIL_EXISTS', 'Этот email уже используется.');
+      const adminUser = await (prisma as any).adminUser.create({ data: { email, name, passwordHash: await hashSecret(temporaryPassword), role: 'COURIER', isActive: body.isActive !== false } });
+      adminUserId = adminUser.id;
+    }
+    const courier = await (prisma as any).courier.create({ data: { name, phone: optionalStr(body.phone, 40), adminUserId, isActive: body.isActive !== false } });
     await adminAudit(admin, 'COURIER_CREATED', 'Courier', courier.id, { name });
     return json(req, res, 201, { courier });
   }
@@ -2437,27 +2634,188 @@ async function router(req: AuthedRequest, res: ServerResponse) {
   if (pathname.startsWith('/v1/courier/')) {
     const courierAdmin = await requireAdmin(req, ['OWNER','COURIER_MANAGER','COURIER']);
     if (method === 'GET' && pathname === '/v1/courier/me') return json(req, res, 200, { courier: courierAdmin });
-    const courier = courierAdmin.role === 'COURIER' ? await courierFromAdmin(courierAdmin) : null;
+    if (method === 'POST' && pathname === '/v1/courier/auth/refresh') {
+      const token = randomUUID() + '.' + randomUUID();
+      await (prisma as any).adminSession.create({ data: { adminUserId: courierAdmin.id, tokenHash: stableHash(token, env.jwtRefreshSecret), expiresAt: future(adminSessionTtlMs) } });
+      return json(req, res, 200, { accessToken: token, courier: { id: courierAdmin.id, email: courierAdmin.email, name: courierAdmin.name, role: courierAdmin.role } });
+    }
+    if (method === 'POST' && pathname === '/v1/courier/auth/logout') {
+      const token = getBearer(req);
+      if (token) await (prisma as any).adminSession.updateMany({ where: { tokenHash: stableHash(token, env.jwtRefreshSecret), adminUserId: courierAdmin.id }, data: { revokedAt: now() } });
+      return json(req, res, 200, { ok: true });
+    }
+
+    const courier = await requireCourierProfile(courierAdmin);
+
+    if (method === 'POST' && pathname === '/v1/courier/device/register') {
+      const body = await readJson(req);
+      const deviceId = str(body.deviceId, 160);
+      if (!deviceId) throw new ApiError(400, 'DEVICE_ID_REQUIRED', 'Не указан идентификатор устройства.');
+      await (prisma as any).courierDevice.upsert({
+        where: { courierId_deviceId: { courierId: courier.id, deviceId } },
+        update: { platform: optionalStr(body.platform, 40) },
+        create: { courierId: courier.id, deviceId, platform: optionalStr(body.platform, 40) },
+      });
+      await adminAudit(courierAdmin, 'COURIER_DEVICE_REGISTERED', 'Courier', courier.id, { platform: optionalStr(body.platform, 40) });
+      return json(req, res, 200, { ok: true });
+    }
+
+    if (method === 'POST' && pathname === '/v1/courier/device/push-token') {
+      const body = await readJson(req);
+      const deviceId = str(body.deviceId, 160);
+      const pushToken = str(body.pushToken, 512);
+      if (!deviceId || !pushToken) throw new ApiError(400, 'PUSH_TOKEN_INVALID', 'Не удалось сохранить push-токен.');
+      await (prisma as any).courierDevice.upsert({
+        where: { courierId_deviceId: { courierId: courier.id, deviceId } },
+        update: { platform: optionalStr(body.platform, 40), pushToken },
+        create: { courierId: courier.id, deviceId, platform: optionalStr(body.platform, 40), pushToken },
+      });
+      return json(req, res, 200, { ok: true });
+    }
+
+    if (method === 'GET' && pathname === '/v1/courier/shift/current') {
+      const shift = await (prisma as any).courierShift.findFirst({ where: { courierId: courier.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } });
+      return json(req, res, 200, { shift: courierShiftDto(shift) });
+    }
+
+    if (method === 'POST' && pathname === '/v1/courier/shift/start') {
+      const body = await readJson(req);
+      const existing = await (prisma as any).courierShift.findFirst({ where: { courierId: courier.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } });
+      if (existing) return json(req, res, 200, { shift: courierShiftDto(existing) });
+      const shift = await (prisma as any).courierShift.create({ data: {
+        courierId: courier.id,
+        startLatitude: validCourierCoordinate(body.latitude, -90, 90),
+        startLongitude: validCourierCoordinate(body.longitude, -180, 180),
+      } });
+      await adminAudit(courierAdmin, 'COURIER_SHIFT_STARTED', 'CourierShift', shift.id, { courierId: courier.id });
+      return json(req, res, 201, { shift: courierShiftDto(shift) });
+    }
+
+    if (method === 'POST' && pathname === '/v1/courier/shift/end') {
+      const body = await readJson(req);
+      const active = await (prisma as any).courierShift.findFirst({ where: { courierId: courier.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } });
+      if (!active) throw new ApiError(409, 'SHIFT_NOT_ACTIVE', 'Нет активной смены.');
+      const shift = await (prisma as any).courierShift.update({ where: { id: active.id }, data: {
+        status: 'ENDED', endedAt: now(),
+        endLatitude: validCourierCoordinate(body.latitude, -90, 90),
+        endLongitude: validCourierCoordinate(body.longitude, -180, 180),
+      } });
+      await adminAudit(courierAdmin, 'COURIER_SHIFT_ENDED', 'CourierShift', shift.id, { courierId: courier.id });
+      return json(req, res, 200, { shift: courierShiftDto(shift) });
+    }
+
+    if (method === 'POST' && pathname === '/v1/courier/location/ping') {
+      const body = await readJson(req);
+      const location = await recordCourierLocation(courier, body);
+      await adminAudit(courierAdmin, 'COURIER_LOCATION_PING', 'CourierLocation', location.id, { courierId: courier.id, deliveryTaskId: location.deliveryTaskId, latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy });
+      return json(req, res, 200, { ok: true, recordedAt: location.recordedAt?.toISOString?.() || now().toISOString() });
+    }
+
+    if (method === 'POST' && pathname === '/v1/courier/sync') {
+      const body = await readJson(req);
+      const events = Array.isArray(body.events) ? body.events.slice(0, 100) : [];
+      let accepted = 0;
+      for (const event of events) {
+        const payload = event?.payload && typeof event.payload === 'object' ? event.payload : event;
+        if (String(event?.type || '').toUpperCase() !== 'LOCATION_PING') continue;
+        await recordCourierLocation(courier, payload).catch(() => null);
+        accepted += 1;
+      }
+      return json(req, res, 200, { ok: true, accepted });
+    }
+
+    if (method === 'GET' && pathname === '/v1/courier/support/tickets') {
+      const items = await (prisma as any).supportTicket.findMany({ where: { courierId: courier.id }, take: 100, orderBy: { updatedAt: 'desc' }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+      return json(req, res, 200, { items: items.map(courierSupportTicketDto) });
+    }
+
+    if (method === 'POST' && pathname === '/v1/courier/support/tickets') {
+      const body = await readJson(req);
+      const subject = str(body.subject || 'Обращение курьера', 160);
+      const message = redactSupportText(body.message, 2000);
+      const category = upperEnum(body.category || 'GENERAL', ['GENERAL','DELIVERY','ACCOUNT','TECHNICAL'] as const, 'SUPPORT_CATEGORY_INVALID');
+      const deliveryId = optionalStr(body.deliveryId, 80);
+      if (!message) throw new ApiError(400, 'SUPPORT_MESSAGE_REQUIRED', 'Сообщение не может быть пустым.');
+      const task = deliveryId ? await taskForCourier(deliveryId, courier) : null;
+      const ticket = await (prisma as any).supportTicket.create({ data: {
+        courierId: courier.id, orderId: task?.orderId || null, subject, category, status: 'OPEN',
+        priority: body.priority === 'HIGH' || category === 'DELIVERY' ? 'HIGH' : 'NORMAL', safeSummary: message.slice(0, 280),
+        contactChannel: 'COURIER_APP', lastMessageAt: now(),
+        messages: { create: { senderType: 'COURIER', senderAdminUserId: courierAdmin.id, body: message, safeBody: message, visibility: 'SUPPORT_AND_COURIER' } },
+      }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+      await adminAudit(courierAdmin, 'COURIER_SUPPORT_TICKET_CREATED', 'SupportTicket', ticket.id, { courierId: courier.id, deliveryTaskId: deliveryId, category });
+      return json(req, res, 201, { ticket: courierSupportTicketDto(ticket) });
+    }
+
+    const courierSupportTicketMatch = pathname.match(/^\/v1\/courier\/support\/tickets\/([^/]+)$/);
+    if (courierSupportTicketMatch && method === 'GET') {
+      const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: courierSupportTicketMatch[1], courierId: courier.id }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+      if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение не найдено.');
+      return json(req, res, 200, { ticket: courierSupportTicketDto(ticket) });
+    }
+
+    const courierSupportMessageMatch = pathname.match(/^\/v1\/courier\/support\/tickets\/([^/]+)\/messages$/);
+    if (courierSupportMessageMatch && method === 'POST') {
+      const body = await readJson(req);
+      const message = redactSupportText(body.message, 2000);
+      if (!message) throw new ApiError(400, 'SUPPORT_MESSAGE_REQUIRED', 'Сообщение не может быть пустым.');
+      const ticket = await (prisma as any).supportTicket.findFirst({ where: { id: courierSupportMessageMatch[1], courierId: courier.id } });
+      if (!ticket) throw new ApiError(404, 'SUPPORT_TICKET_NOT_FOUND', 'Обращение не найдено.');
+      await (prisma as any).supportMessage.create({ data: { ticketId: ticket.id, senderType: 'COURIER', senderAdminUserId: courierAdmin.id, body: message, safeBody: message, visibility: 'SUPPORT_AND_COURIER' } });
+      const updated = await (prisma as any).supportTicket.update({ where: { id: ticket.id }, data: { status: 'PENDING_TEAM', lastMessageAt: now(), updatedAt: now() }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+      await adminAudit(courierAdmin, 'COURIER_SUPPORT_TICKET_REPLIED', 'SupportTicket', ticket.id, { courierId: courier.id });
+      return json(req, res, 200, { ticket: courierSupportTicketDto(updated) });
+    }
+
     if (method === 'GET' && pathname === '/v1/courier/deliveries') {
-      const where = courier ? { courierId: courier.id } : {};
-      const tasks = await (prisma as any).deliveryTask.findMany({ where, orderBy: { updatedAt: 'desc' }, include: { order: { include: { deliveryAddress: true } } } });
+      const tasks = await (prisma as any).deliveryTask.findMany({ where: { courierId: courier.id }, orderBy: { updatedAt: 'desc' }, include: { order: { include: { deliveryAddress: true } } } });
       return json(req, res, 200, { items: tasks.map(courierTaskDto) });
     }
     const courierDeliveryMatch = pathname.match(/^\/v1\/courier\/deliveries\/([^/]+)$/);
     if (courierDeliveryMatch && method === 'GET') {
-      const where: any = { id: courierDeliveryMatch[1] };
-      if (courier) where.courierId = courier.id;
-      const task = await (prisma as any).deliveryTask.findFirst({ where, include: { order: { include: { deliveryAddress: true } } } });
-      if (!task) throw new ApiError(404, 'DELIVERY_NOT_FOUND', 'Доставка не найдена.');
+      const task = await taskForCourier(courierDeliveryMatch[1], courier);
       return json(req, res, 200, courierTaskDto(task));
     }
+
+    const courierProofMatch = pathname.match(/^\/v1\/courier\/deliveries\/([^/]+)\/proof$/);
+    if (courierProofMatch && method === 'POST') {
+      const body = await readJson(req);
+      const task = await taskForCourier(courierProofMatch[1], courier);
+      const proofType = str(body.type, 24).toUpperCase();
+      if (proofType !== 'OTP') throw new ApiError(400, 'PROOF_TYPE_INVALID', 'Для этого запроса нужен код клиента.');
+      const otpCode = str(body.otpCode, 8);
+      if (!/^\d{4,8}$/.test(otpCode)) throw new ApiError(400, 'OTP_INVALID', 'Код клиента должен состоять из 4–8 цифр.');
+      const latitude = validCourierCoordinate(body.latitude, -90, 90);
+      const longitude = validCourierCoordinate(body.longitude, -180, 180);
+      await (prisma as any).deliveryProof.create({ data: {
+        deliveryTaskId: task.id, type: 'OTP', otpCodeHash: stableHash(otpCode, env.jwtRefreshSecret), note: optionalStr(body.note, 500),
+        latitude, longitude, accuracy: validCourierCoordinate(body.accuracy, 0, 10_000), metadata: { verifiedBy: 'courier-app' },
+      } });
+      if (latitude !== null && longitude !== null) await recordCourierLocation(courier, body, task.id);
+      const updated = await markCourierDeliveryDelivered(task, courierAdmin, 'courier OTP proof');
+      return json(req, res, 200, { ok: true, task: courierTaskDto(updated) });
+    }
+
+    const courierPhotoProofMatch = pathname.match(/^\/v1\/courier\/deliveries\/([^/]+)\/proof\/photo$/);
+    if (courierPhotoProofMatch && method === 'POST') {
+      const task = await taskForCourier(courierPhotoProofMatch[1], courier);
+      const { bytes, contentType } = extractMultipartPhoto(await readBinary(req), String(req.headers['content-type'] || ''));
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      await (prisma as any).deliveryProof.create({ data: {
+        deliveryTaskId: task.id, type: 'PHOTO', metadata: {
+          contentType, bytes: bytes.length, sha256,
+          // Stored in the protected operations database. The response never exposes image content.
+          photoBase64: bytes.toString('base64'),
+        },
+      } });
+      const updated = await markCourierDeliveryDelivered(task, courierAdmin, 'courier photo proof');
+      return json(req, res, 200, { ok: true, task: courierTaskDto(updated), proof: { type: 'PHOTO', sha256 } });
+    }
+
     const courierStatusMatch = pathname.match(/^\/v1\/courier\/deliveries\/([^/]+)\/status$/);
     if (courierStatusMatch && method === 'PATCH') {
       const body = await readJson(req);
-      const where: any = { id: courierStatusMatch[1] };
-      if (courier) where.courierId = courier.id;
-      const task = await (prisma as any).deliveryTask.findFirst({ where });
-      if (!task) throw new ApiError(404, 'DELIVERY_NOT_FOUND', 'Доставка не найдена.');
+      const task = await taskForCourier(courierStatusMatch[1], courier);
       const status = str(body.status, 60).toUpperCase();
       if (!canTransitionDelivery(task.status, status, courierAdmin.role)) throw new ApiError(409, 'DELIVERY_STATUS_TRANSITION_INVALID', 'Недопустимый переход статуса доставки.');
       const updated = await (prisma as any).deliveryTask.update({ where: { id: task.id }, data: { status } });
@@ -2466,27 +2824,27 @@ async function router(req: AuthedRequest, res: ServerResponse) {
         await (prisma as any).order.update({ where: { id: task.orderId }, data: { status: orderStatus } });
         await createPublicOrderEvent(task.orderId, orderStatus, str(body.reason || 'courier update', 240));
       }
+      if (body.latitude !== undefined || body.longitude !== undefined) await recordCourierLocation(courier, body, task.id);
       await adminAudit(courierAdmin, 'COURIER_DELIVERY_STATUS_CHANGED', 'DeliveryTask', task.id, { status });
       return json(req, res, 200, { task: courierTaskDto(updated) });
     }
     const courierProblemMatch = pathname.match(/^\/v1\/courier\/deliveries\/([^/]+)\/problem$/);
     if (courierProblemMatch && method === 'POST') {
       const body = await readJson(req);
-      const where: any = { id: courierProblemMatch[1] };
-      if (courier) where.courierId = courier.id;
-      const task = await (prisma as any).deliveryTask.findFirst({ where });
-      if (!task) throw new ApiError(404, 'DELIVERY_NOT_FOUND', 'Доставка не найдена.');
+      const task = await taskForCourier(courierProblemMatch[1], courier);
       if (!canTransitionDelivery(task.status, 'DELIVERY_ISSUE', courierAdmin.role)) throw new ApiError(409, 'DELIVERY_STATUS_TRANSITION_INVALID', 'Недопустимый переход статуса доставки.');
       await (prisma as any).deliveryTask.update({ where: { id: task.id }, data: { status: 'DELIVERY_ISSUE' } });
       await (prisma as any).order.update({ where: { id: task.orderId }, data: { status: 'ISSUE' } });
       await createPublicOrderEvent(task.orderId, 'ISSUE', str(body.problem || 'courier problem', 500));
-      await adminAudit(courierAdmin, 'COURIER_DELIVERY_PROBLEM', 'DeliveryTask', task.id, { problem: str(body.problem || '', 500) });
+      if (body.latitude !== undefined || body.longitude !== undefined) await recordCourierLocation(courier, body, task.id);
+      await adminAudit(courierAdmin, 'COURIER_DELIVERY_PROBLEM', 'DeliveryTask', task.id, { problem: str(body.reasonCode || body.problem || '', 500) });
       return json(req, res, 200, { ok: true });
     }
     const courierLocationMatch = pathname.match(/^\/v1\/courier\/deliveries\/([^/]+)\/location$/);
     if (courierLocationMatch && method === 'POST') {
       const body = await readJson(req);
-      await adminAudit(courierAdmin, 'COURIER_LOCATION_PING', 'DeliveryTask', courierLocationMatch[1], { latitude: Number(body.latitude), longitude: Number(body.longitude) });
+      const location = await recordCourierLocation(courier, body, courierLocationMatch[1]);
+      await adminAudit(courierAdmin, 'COURIER_LOCATION_PING', 'CourierLocation', location.id, { deliveryTaskId: courierLocationMatch[1], latitude: location.latitude, longitude: location.longitude });
       return json(req, res, 200, { ok: true });
     }
     throw new ApiError(404, 'COURIER_ROUTE_NOT_FOUND', 'Courier route not found.');

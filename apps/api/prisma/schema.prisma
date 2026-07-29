@@ -730,6 +730,8 @@ model DeliveryTask {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  locations         CourierLocation[]
+  proofs            DeliveryProof[]
   @@index([orderId, status])
 }
 
@@ -848,6 +850,74 @@ model Courier {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   assignments CourierAssignment[]
+  shifts      CourierShift[]
+  locations   CourierLocation[]
+  devices     CourierDevice[]
+}
+
+model CourierShift {
+  id             String   @id @default(uuid())
+  courierId      String
+  status         String   @default("ACTIVE")
+  startedAt      DateTime @default(now())
+  endedAt        DateTime?
+  startLatitude  Float?
+  startLongitude Float?
+  endLatitude    Float?
+  endLongitude   Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  locations      CourierLocation[]
+  @@index([courierId, status])
+  @@index([status, startedAt])
+}
+
+model CourierLocation {
+  id             String        @id @default(uuid())
+  courierId      String
+  shiftId        String?
+  deliveryTaskId String?
+  latitude       Float
+  longitude      Float
+  accuracy       Float?
+  heading        Float?
+  speed          Float?
+  recordedAt     DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  courier        Courier       @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  shift          CourierShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  deliveryTask   DeliveryTask? @relation(fields: [deliveryTaskId], references: [id], onDelete: SetNull)
+  @@index([courierId, recordedAt])
+  @@index([deliveryTaskId, recordedAt])
+}
+
+model CourierDevice {
+  id         String   @id @default(uuid())
+  courierId  String
+  deviceId   String
+  platform   String?
+  pushToken  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  courier    Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  @@unique([courierId, deviceId])
+  @@index([pushToken])
+}
+
+model DeliveryProof {
+  id             String       @id @default(uuid())
+  deliveryTaskId String
+  type           String
+  otpCodeHash    String?
+  note           String?
+  latitude       Float?
+  longitude      Float?
+  accuracy       Float?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  deliveryTask   DeliveryTask @relation(fields: [deliveryTaskId], references: [id], onDelete: Cascade)
+  @@index([deliveryTaskId, createdAt])
 }
 
 model CourierAssignment {
@@ -896,6 +966,7 @@ model SupportTicket {
   id          String   @id @default(uuid())
   userId      String?
   orderId     String?
+  courierId   String?
   subject     String
   category    String   @default("GENERAL")
   status      String   @default("OPEN")
@@ -913,6 +984,7 @@ model SupportTicket {
   messages    SupportMessage[]
   @@index([userId, status])
   @@index([orderId, status])
+  @@index([courierId, status])
   @@index([status, updatedAt])
 }
 

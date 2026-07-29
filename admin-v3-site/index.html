@@ -1010,7 +1010,7 @@
       return body;
     }
     async function courierSupportApi(path, options = {}) {
-      throw new Error('Канал Courier support станет доступен после подключения отдельного courier backend.');
+      return api('/v1/admin/courier-support' + path, options);
     }
     function money(value, currency = 'AMD') {
       if (value === undefined || value === null || value === '') return '—';
