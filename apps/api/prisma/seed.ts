@@ -70,9 +70,9 @@ async function main() {
   }
 
   const plans = [
-    ['essential', 'Essential', 1290000, 16, [['pad-day', 12], ['pad-night', 4], ['wipes', 1]]],
-    ['comfort', 'Comfort', 1690000, 24, [['pad-day', 16], ['pad-night', 6], ['liner', 10], ['wipes', 1], ['tea', 1]]],
-    ['ritual', 'Moon Ritual', 2490000, 32, [['pad-day', 18], ['pad-night', 8], ['liner', 14], ['wipes', 1], ['tea', 1], ['chocolate', 1], ['heat-pad', 1]]],
+    ['essential', 'Essential', 890000, 16, [['pad-day', 12], ['pad-night', 4], ['wipes', 1]]],
+    ['comfort', 'Comfort', 1490000, 24, [['pad-day', 16], ['pad-night', 6], ['liner', 10], ['wipes', 1], ['tea', 1]]],
+    ['ritual', 'Moon Ritual', 2290000, 32, [['pad-day', 18], ['pad-night', 8], ['liner', 14], ['wipes', 1], ['tea', 1], ['chocolate', 1], ['heat-pad', 1]]],
   ] as const;
 
   for (const [code, name, basePriceMinor, includedUnits, includes] of plans) {

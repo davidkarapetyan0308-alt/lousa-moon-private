@@ -117,10 +117,10 @@ export default function BoxScreen() {
   const currentOrder = box.orders[0] || null;
   const hasCycleData = periodRecords.some((record) => record.confirmed && !record.deletedAt && !record.needsReview);
   const planImage = box.planId === 'essential'
-    ? require('../../assets/images/box/box-essential.png')
+    ? require('../../assets/images/box/box-essential-v2.png')
     : box.planId === 'ritual'
-      ? require('../../assets/images/box/box-moon-ritual.png')
-      : require('../../assets/images/box/box-comfort.png');
+      ? require('../../assets/images/box/box-moon-ritual-v2.png')
+      : require('../../assets/images/box/box-comfort-v2.png');
   const orderStepIndex = currentOrder?.status === 'delivered' ? 3
     : ['courier_assigned', 'out_for_delivery'].includes(currentOrder?.status || '') ? 2
       : ['packing', 'ready'].includes(currentOrder?.status || '') ? 1 : 0;

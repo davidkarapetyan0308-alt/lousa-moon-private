@@ -591,6 +591,15 @@ const DEFAULT_PRODUCT_METADATA: Record<string, Record<string, unknown>> = {
   'heat-pad': { allergens: [], materials: ['iron_powder', 'activated_carbon'] },
 };
 
+// This is intentionally mirrored in src/data/boxCatalog.ts. The backend is
+// the source of truth at checkout and also updates existing catalog rows so a
+// deployed price change cannot leave mobile previews out of sync.
+const DEFAULT_BOX_PLANS = [
+  ['essential', 'Essential', 890000, 16, [['pad-day', 12], ['pad-night', 4], ['wipes', 1]]],
+  ['comfort', 'Comfort', 1490000, 24, [['pad-day', 16], ['pad-night', 6], ['liner', 10], ['wipes', 1], ['tea', 1]]],
+  ['ritual', 'Moon Ritual', 2290000, 32, [['pad-day', 18], ['pad-night', 8], ['liner', 14], ['wipes', 1], ['tea', 1], ['chocolate', 1], ['heat-pad', 1]]],
+] as const;
+
 async function ensureCatalog() {
   const count = await (prisma as any).productCatalogItem.count();
   let zone = await (prisma as any).deliveryZone.findFirst({ where: { name: 'Gyumri Standard' } });
@@ -605,6 +614,15 @@ async function ensureCatalog() {
       const existing = await (prisma as any).productCatalogItem.findUnique({ where: { sku } }).catch(() => null);
       if (existing && JSON.stringify(existing.metadata || {}) !== JSON.stringify(metadata)) {
         await (prisma as any).productCatalogItem.update({ where: { sku }, data: { metadata } }).catch(() => null);
+      }
+    }
+    for (const [code, name, basePriceMinor, includedUnits] of DEFAULT_BOX_PLANS) {
+      const existing = await (prisma as any).boxPlan.findUnique({ where: { code } }).catch(() => null);
+      if (existing && (existing.name !== name || existing.basePriceMinor !== basePriceMinor || existing.includedUnits !== includedUnits || existing.currency !== 'AMD' || !existing.isActive)) {
+        await (prisma as any).boxPlan.update({
+          where: { code },
+          data: { name, basePriceMinor, includedUnits, currency: 'AMD', isActive: true },
+        });
       }
     }
     return;
@@ -629,12 +647,7 @@ async function ensureCatalog() {
     await (prisma as any).productPrice.create({ data: { productId: product.id, amountMinor: price, currency: 'AMD', priceVersion: 1 } });
     await (prisma as any).inventoryItem.create({ data: { productId: product.id, availableQuantity: stock, reservedQuantity: 0, warehouseId: 'gyumri-main' } });
   }
-  const plans = [
-    ['essential', 'Essential', 1290000, 16, [['pad-day', 12], ['pad-night', 4], ['wipes', 1]]],
-    ['comfort', 'Comfort', 1690000, 24, [['pad-day', 16], ['pad-night', 6], ['liner', 10], ['wipes', 1], ['tea', 1]]],
-    ['ritual', 'Moon Ritual', 2490000, 32, [['pad-day', 18], ['pad-night', 8], ['liner', 14], ['wipes', 1], ['tea', 1], ['chocolate', 1], ['heat-pad', 1]]],
-  ];
-  for (const [code, name, basePriceMinor, includedUnits, includes] of plans as any[]) {
+  for (const [code, name, basePriceMinor, includedUnits, includes] of DEFAULT_BOX_PLANS as unknown as any[]) {
     const plan = await (prisma as any).boxPlan.create({ data: { code, name, basePriceMinor, includedUnits, currency: 'AMD', isActive: true } });
     for (const [sku, includedQuantity] of includes) {
       await (prisma as any).boxPlanIncludedItem.create({ data: { planId: plan.id, productId: created[sku], includedQuantity } });
@@ -1708,7 +1721,7 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     let plan = await (prisma as any).boxPlan.findFirst({ where: { code: 'dev-essential' } });
     if (!plan) {
       plan = await (prisma as any).boxPlan.create({
-        data: { code: 'dev-essential', name: 'Dev Essential', basePriceMinor: 1290000, currency: 'AMD', isActive: true }
+        data: { code: 'dev-essential', name: 'Dev Essential', basePriceMinor: 890000, currency: 'AMD', isActive: true }
       });
     }
 
