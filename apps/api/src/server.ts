@@ -2450,17 +2450,19 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
 
   if (method === 'GET' && pathname === '/v1/admin/couriers') {
     requireRole(admin, ['OWNER','ADMIN','COURIER_MANAGER','READONLY']);
-    const items = await (prisma as any).courier.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { assignments: true, adminUser: { select: { email: true } } },
-    });
+    const items = await (prisma as any).courier.findMany({ orderBy: { createdAt: 'desc' }, include: { assignments: true } });
+    const adminUserIds = [...new Set(items.map((courier: any) => courier.adminUserId).filter(Boolean))];
+    const accounts = adminUserIds.length
+      ? await (prisma as any).adminUser.findMany({ where: { id: { in: adminUserIds } }, select: { id: true, email: true } })
+      : [];
+    const emailByAdminUserId = new Map(accounts.map((account: any) => [account.id, account.email]));
     const enriched = await Promise.all(items.map(async (c: any) => {
       const [shift, location] = await Promise.all([
         (prisma as any).courierShift.findFirst({ where: { courierId: c.id, status: 'ACTIVE' }, orderBy: { startedAt: 'desc' } }),
         (prisma as any).courierLocation.findFirst({ where: { courierId: c.id }, orderBy: { recordedAt: 'desc' } }),
       ]);
       return {
-        id: c.id, adminUserId: c.adminUserId, email: c.adminUser?.email || null, name: c.name, phone: c.phone, isActive: c.isActive, assignmentsCount: c.assignments?.length || 0,
+        id: c.id, adminUserId: c.adminUserId, email: c.adminUserId ? emailByAdminUserId.get(c.adminUserId) || null : null, name: c.name, phone: c.phone, isActive: c.isActive, assignmentsCount: c.assignments?.length || 0,
         shiftStatus: shift ? 'OPEN' : 'CLOSED', shiftOpenedAt: shift?.startedAt?.toISOString?.() || null, shiftClosedAt: shift?.endedAt?.toISOString?.() || null,
         lastLocation: location ? { latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy, heading: location.heading, recordedAt: location.recordedAt?.toISOString?.() || null } : null,
         latitude: location?.latitude ?? null, longitude: location?.longitude ?? null, heading: location?.heading ?? null,
@@ -2507,15 +2509,16 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
     if (temporaryPassword.length < 10) {
       throw new ApiError(400, 'COURIER_PASSWORD_INVALID', 'Новый пароль курьера должен быть не короче 10 символов.');
     }
-    const courier = await (prisma as any).courier.findUnique({
-      where: { id: courierCredentialsMatch[1] },
-      include: { adminUser: { select: { id: true, email: true } } },
-    });
-    if (!courier?.adminUser) {
+    const courier = await (prisma as any).courier.findUnique({ where: { id: courierCredentialsMatch[1] } });
+    if (!courier?.adminUserId) {
       throw new ApiError(409, 'COURIER_ACCOUNT_MISSING', 'У этого курьера ещё нет аккаунта для входа. Создайте аккаунт курьера через соответствующую кнопку.');
     }
+    const existingAccount = await (prisma as any).adminUser.findUnique({ where: { id: courier.adminUserId }, select: { id: true, email: true } });
+    if (!existingAccount) {
+      throw new ApiError(409, 'COURIER_ACCOUNT_MISSING', 'Связанный аккаунт курьера не найден. Создайте аккаунт курьера заново.');
+    }
     const account = await (prisma as any).adminUser.update({
-      where: { id: courier.adminUser.id },
+      where: { id: existingAccount.id },
       data: { passwordHash: await hashSecret(temporaryPassword), isActive: true },
     });
     await adminAudit(admin, 'COURIER_PASSWORD_RESET', 'Courier', courier.id, { email: account.email });
