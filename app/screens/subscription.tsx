@@ -18,6 +18,7 @@ import { calculateBoxQuote } from '../../src/services/boxQuote';
 import { getServiceMode, services } from '../../src/services';
 import type { ServerOrderQuote } from '../../src/services/contracts';
 import { structureAllergens } from '../../src/services/allergenSafety';
+import { QuoteValidationError } from '../../src/services/quoteValidation';
 import { GuestAccountGate } from '../../src/features/auth/components/GuestAccountGate';
 const WINDOWS = ['10:00–14:00', '14:00–18:00', '18:00–21:00'];
 const PLAN_IMAGES = {
@@ -233,7 +234,7 @@ function AuthenticatedSubscriptionScreen() {
         if (result.data.deliveryFeeMinor !== 0)
             throw new Error('Сервер вернул недопустимую стоимость доставки. Оформление остановлено.');
         if (result.data.validationErrors.length)
-            throw new Error(`Нельзя оформить заказ: ${result.data.validationErrors.join(', ')}`);
+            throw new QuoteValidationError(result.data.validationErrors, language);
         setServerQuote(result.data);
         return result.data;
     };
@@ -253,6 +254,8 @@ function AuthenticatedSubscriptionScreen() {
                 await requestServerQuote();
             }
             catch (cause) {
+                if (cause instanceof QuoteValidationError)
+                    setStep(1);
                 setError(cause instanceof Error ? cause.message : 'QUOTE_ERROR');
                 setProcessing(false);
                 return;

@@ -32,7 +32,7 @@ async function main() {
     'menstrual-cup': { allergens: [], materials: ['medical_grade_silicone'], fragranceFree: true },
     'menstrual-disc': { allergens: [], materials: ['medical_grade_silicone'], fragranceFree: true },
     liner: { allergens: [], materials: ['cotton', 'cellulose'], fragranceFree: true },
-    wipes: { allergens: ['fragrance'], materials: ['nonwoven'], fragranceFree: false },
+    wipes: { allergens: [], materials: ['nonwoven'], fragranceFree: true },
     tea: { allergens: ['herbs'], ingredients: ['herbal_blend'] },
     chocolate: { allergens: ['milk', 'nuts'], ingredients: ['cocoa', 'milk'], requiresLabelReview: true },
     'heat-pad': { allergens: [], materials: ['iron_powder', 'activated_carbon'] },

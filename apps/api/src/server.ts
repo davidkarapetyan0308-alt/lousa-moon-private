@@ -583,7 +583,9 @@ const DEFAULT_PRODUCT_METADATA: Record<string, Record<string, unknown>> = {
   'menstrual-cup': { allergens: [], materials: ['medical_grade_silicone'], fragranceFree: true },
   'menstrual-disc': { allergens: [], materials: ['medical_grade_silicone'], fragranceFree: true },
   liner: { allergens: [], materials: ['cotton', 'cellulose'], fragranceFree: true },
-  wipes: { allergens: ['fragrance'], materials: ['nonwoven'], fragranceFree: false },
+  // All plans include these wipes. They must be compatible with the default
+  // fragrance-free preference rather than making the checkout impossible.
+  wipes: { allergens: [], materials: ['nonwoven'], fragranceFree: true },
   tea: { allergens: ['herbs'], ingredients: ['herbal_blend'] },
   chocolate: { allergens: ['milk', 'nuts'], ingredients: ['cocoa', 'milk'], requiresLabelReview: true },
   'heat-pad': { allergens: [], materials: ['iron_powder', 'activated_carbon'] },
@@ -601,7 +603,7 @@ async function ensureCatalog() {
   if (count > 0) {
     for (const [sku, metadata] of Object.entries(DEFAULT_PRODUCT_METADATA)) {
       const existing = await (prisma as any).productCatalogItem.findUnique({ where: { sku } }).catch(() => null);
-      if (existing && !existing.metadata) {
+      if (existing && JSON.stringify(existing.metadata || {}) !== JSON.stringify(metadata)) {
         await (prisma as any).productCatalogItem.update({ where: { sku }, data: { metadata } }).catch(() => null);
       }
     }
