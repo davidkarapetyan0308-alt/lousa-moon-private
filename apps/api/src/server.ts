@@ -1509,6 +1509,7 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
 
   if (method === 'POST' && pathname === '/v1/admin/recover-owner-password') {
     const configuredSecret = process.env.ADMIN_OWNER_RECOVERY_SECRET?.trim() || '';
+    const recoveryRunId = process.env.ADMIN_OWNER_RECOVERY_RUN_ID?.trim() || '';
     if (!isOwnerRecoveryEnabled() || !configuredSecret) {
       throw new ApiError(404, 'NOT_FOUND', 'Not found.');
     }
@@ -1530,7 +1531,7 @@ async function handleAdminRoutes(pathname: string, parsed: URL, method: string, 
       throw error;
     }
     try {
-      const owner = await recoverOwnerPassword(prisma, payload, hashSecret);
+      const owner = await recoverOwnerPassword(prisma, payload, hashSecret, recoveryRunId);
       return json(req, res, 200, { ok: true, admin: owner });
     } catch (error) {
       if (error instanceof OwnerRecoveryError) {

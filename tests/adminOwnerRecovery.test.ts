@@ -1,6 +1,7 @@
 import {
   OwnerRecoveryError,
   isOwnerRecoveryEnabled,
+  isValidRecoveryRunId,
   parseOwnerRecoveryPayload,
   recoverOwnerPassword,
   recoverySecretMatches,
@@ -29,11 +30,14 @@ function recoveryStore(options: { ownerEmail?: string; ownerCount?: number; reco
 }
 
 describe('admin owner recovery', () => {
-  test('is invisible unless both explicit recovery variables are present', () => {
+  test('is invisible unless all explicit recovery variables are present', () => {
     expect(isOwnerRecoveryEnabled({})).toBe(false);
     expect(isOwnerRecoveryEnabled({ ADMIN_OWNER_RECOVERY_ENABLED: 'true' })).toBe(false);
     expect(isOwnerRecoveryEnabled({ ADMIN_OWNER_RECOVERY_SECRET: 'secret' })).toBe(false);
-    expect(isOwnerRecoveryEnabled({ ADMIN_OWNER_RECOVERY_ENABLED: 'true', ADMIN_OWNER_RECOVERY_SECRET: 'secret' })).toBe(true);
+    expect(isOwnerRecoveryEnabled({ ADMIN_OWNER_RECOVERY_ENABLED: 'true', ADMIN_OWNER_RECOVERY_SECRET: 'secret' })).toBe(false);
+    expect(isValidRecoveryRunId('run_2026_07_29_owner')).toBe(true);
+    expect(isValidRecoveryRunId('short')).toBe(false);
+    expect(isOwnerRecoveryEnabled({ ADMIN_OWNER_RECOVERY_ENABLED: 'true', ADMIN_OWNER_RECOVERY_SECRET: 'secret', ADMIN_OWNER_RECOVERY_RUN_ID: 'run_2026_07_29_owner' })).toBe(true);
   });
 
   test('uses constant-time comparison and validates exact secure payload', () => {
@@ -47,29 +51,31 @@ describe('admin owner recovery', () => {
 
   test('changes only the sole matching owner, revokes sessions, and does not audit secrets', async () => {
     const store = recoveryStore();
-    const result = await recoverOwnerPassword(store, validPayload, async () => 'salt:hash');
+    const result = await recoverOwnerPassword(store, validPayload, async () => 'salt:hash', 'run_2026_07_29_owner');
     expect(result).toEqual({ email: validPayload.email, role: 'OWNER' });
     expect(store.changes[0]).toMatchObject({ passwordHash: 'salt:hash', isActive: true });
     expect(store.sessions).toHaveLength(1);
-    expect(store.audit[0]).toMatchObject({ action: 'ADMIN_OWNER_PASSWORD_RECOVERED', metadata: { source: 'protected_one_time_recovery' } });
+    expect(store.audit[0]).toMatchObject({ action: 'ADMIN_OWNER_PASSWORD_RECOVERED', metadata: { source: 'protected_one_time_recovery', recoveryRunId: 'run_2026_07_29_owner' } });
     expect(JSON.stringify(store.audit[0])).not.toContain(validPayload.password);
     expect(JSON.stringify(store.audit[0])).not.toContain(validPayload.email);
   });
 
   test('allows a blank email only when there is exactly one owner', async () => {
     const payload = { ...validPayload, email: null };
-    await expect(recoverOwnerPassword(recoveryStore({ ownerEmail: 'unknown@lousa.app' }), payload, async () => 'hash'))
+    await expect(recoverOwnerPassword(recoveryStore({ ownerEmail: 'unknown@lousa.app' }), payload, async () => 'hash', 'run_2026_07_29_owner'))
       .resolves.toEqual({ email: 'unknown@lousa.app', role: 'OWNER' });
-    await expect(recoverOwnerPassword(recoveryStore({ ownerCount: 2 }), payload, async () => 'hash'))
+    await expect(recoverOwnerPassword(recoveryStore({ ownerCount: 2 }), payload, async () => 'hash', 'run_2026_07_29_owner'))
       .rejects.toMatchObject<Partial<OwnerRecoveryError>>({ code: 'OWNER_RECOVERY_NOT_ALLOWED' });
   });
 
   test('refuses a non-matching owner, multiple owners, and a repeated recovery', async () => {
-    await expect(recoverOwnerPassword(recoveryStore({ ownerEmail: 'other@lousa.app' }), validPayload, async () => 'hash'))
+    await expect(recoverOwnerPassword(recoveryStore({ ownerEmail: 'other@lousa.app' }), validPayload, async () => 'hash', 'run_2026_07_29_owner'))
       .rejects.toMatchObject<Partial<OwnerRecoveryError>>({ code: 'OWNER_RECOVERY_NOT_ALLOWED' });
-    await expect(recoverOwnerPassword(recoveryStore({ ownerCount: 2 }), validPayload, async () => 'hash'))
+    await expect(recoverOwnerPassword(recoveryStore({ ownerCount: 2 }), validPayload, async () => 'hash', 'run_2026_07_29_owner'))
       .rejects.toMatchObject<Partial<OwnerRecoveryError>>({ code: 'OWNER_RECOVERY_NOT_ALLOWED' });
-    await expect(recoverOwnerPassword(recoveryStore({ recovered: true }), validPayload, async () => 'hash'))
+    const recoveredStore = recoveryStore({ recovered: true });
+    recoveredStore.transaction.auditLog.findFirst.mockResolvedValue({ id: 'audit-1', metadata: { recoveryRunId: 'run_2026_07_29_owner' } });
+    await expect(recoverOwnerPassword(recoveredStore, validPayload, async () => 'hash', 'run_2026_07_29_owner'))
       .rejects.toMatchObject<Partial<OwnerRecoveryError>>({ code: 'OWNER_RECOVERY_ALREADY_USED' });
   });
 });

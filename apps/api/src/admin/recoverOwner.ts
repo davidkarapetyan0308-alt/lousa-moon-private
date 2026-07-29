@@ -16,7 +16,13 @@ export class OwnerRecoveryError extends Error {
 }
 
 export function isOwnerRecoveryEnabled(environment: Record<string, string | undefined> = process.env) {
-  return environment.ADMIN_OWNER_RECOVERY_ENABLED === 'true' && Boolean(environment.ADMIN_OWNER_RECOVERY_SECRET?.trim());
+  return environment.ADMIN_OWNER_RECOVERY_ENABLED === 'true'
+    && Boolean(environment.ADMIN_OWNER_RECOVERY_SECRET?.trim())
+    && isValidRecoveryRunId(environment.ADMIN_OWNER_RECOVERY_RUN_ID);
+}
+
+export function isValidRecoveryRunId(value: unknown) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(value);
 }
 
 export function recoverySecretMatches(provided: unknown, expected: string) {
@@ -52,6 +58,7 @@ export async function recoverOwnerPassword(
   prismaClient: any,
   payload: OwnerRecoveryPayload,
   hashPassword: (password: string) => Promise<string>,
+  recoveryRunId: string,
 ) {
   return prismaClient.$transaction(async (transaction: any) => {
     // This lock makes the permanent one-time check safe under concurrent requests.
@@ -63,9 +70,9 @@ export async function recoverOwnerPassword(
     const owner = owners[0];
     const previousRecovery = await transaction.auditLog.findFirst({
       where: { action: 'ADMIN_OWNER_PASSWORD_RECOVERED', entityType: 'AdminUser', entityId: owner.id },
-      select: { id: true },
+      select: { id: true, metadata: true },
     });
-    if (previousRecovery) {
+    if ((previousRecovery?.metadata as any)?.recoveryRunId === recoveryRunId) {
       throw new OwnerRecoveryError('OWNER_RECOVERY_ALREADY_USED', 'Owner recovery was already used.');
     }
 
@@ -84,7 +91,7 @@ export async function recoverOwnerPassword(
         action: 'ADMIN_OWNER_PASSWORD_RECOVERED',
         entityType: 'AdminUser',
         entityId: owner.id,
-        metadata: { source: 'protected_one_time_recovery' },
+        metadata: { source: 'protected_one_time_recovery', recoveryRunId },
       },
     });
     return { email: owner.email, role: 'OWNER' as const };
