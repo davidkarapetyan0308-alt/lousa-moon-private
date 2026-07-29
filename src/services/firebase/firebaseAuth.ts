@@ -120,6 +120,7 @@ function requireFirebaseAuth(): NativeFirebaseAuth | ServiceResult<never> {
 
 const BACKEND_READY_TIMEOUT_MS = 5_000;
 const BACKEND_SESSION_TIMEOUT_MS = 4_000;
+const FIREBASE_ID_TOKEN_TIMEOUT_MS = 8_000;
 
 function appRequestHeaders(attemptId: string) {
   return {
@@ -336,10 +337,13 @@ async function exchangeFirebaseIdToken(
   });
 }
 
-async function tokenFromCurrentUser(auth: NativeFirebaseAuth, forceRefresh = true) {
+async function tokenFromCurrentUser(auth: NativeFirebaseAuth, forceRefresh = false) {
   const user = auth.currentUser;
   if (!user) throw new Error('Firebase user is missing after sign-in.');
-  return user.getIdToken(forceRefresh);
+  return withTimeout<string>(
+    () => user.getIdToken(forceRefresh),
+    { timeoutMs: FIREBASE_ID_TOKEN_TIMEOUT_MS, stage: 'FIREBASE_ID_TOKEN' },
+  );
 }
 
 function firebaseError(error: unknown, fallbackCode = 'FIREBASE_AUTH_FAILED'): ServiceResult<never> {
@@ -438,7 +442,7 @@ export const firebaseAuthService: AuthService = {
       firebaseCredentialSucceeded = true;
       traceAuth(attemptId, 'FIREBASE_CREDENTIAL_SUCCEEDED');
       traceAuth(attemptId, 'FIREBASE_ID_TOKEN_STARTED');
-      const firebaseIdToken = await withTimeout(() => tokenFromCurrentUser(authOrError, true), { timeoutMs: 8_000, stage: 'FIREBASE_ID_TOKEN' });
+      const firebaseIdToken = await tokenFromCurrentUser(authOrError);
       traceAuth(attemptId, 'FIREBASE_ID_TOKEN_RECEIVED', { tokenPresent: true, tokenLength: firebaseIdToken.length });
       return exchangeFirebaseIdToken(firebaseIdToken, 'firebase-google', {}, authOrError.currentUser, attemptId);
     } catch (error) {
@@ -474,7 +478,7 @@ export const firebaseAuthService: AuthService = {
     if (!confirmation) return fail('FIREBASE_PHONE_CONFIRMATION_MISSING', 'Сначала запросите SMS-код ещё раз.');
     try {
       await confirmation.confirm(input.code);
-      const idToken = await tokenFromCurrentUser(authOrError, true);
+      const idToken = await tokenFromCurrentUser(authOrError);
       phoneConfirmations.delete(input.phone);
       return exchangeFirebaseIdToken(idToken, 'firebase-phone', {}, authOrError.currentUser);
     } catch (error) {
@@ -516,7 +520,7 @@ export const firebaseAuthService: AuthService = {
     if ('ok' in authOrError) return authOrError as ServiceResult<SessionInfo>;
     try {
       const pending = await readPendingFirebaseExchange();
-      const idToken = await tokenFromCurrentUser(authOrError, true);
+      const idToken = await tokenFromCurrentUser(authOrError);
       return exchangeFirebaseIdToken(
         idToken,
         pending?.provider || 'firebase-refresh',
@@ -534,7 +538,7 @@ export const firebaseAuthService: AuthService = {
     if ('ok' in authOrError) return authOrError as ServiceResult<SessionInfo>;
     try {
       const pending = await readPendingFirebaseExchange();
-      const idToken = await tokenFromCurrentUser(authOrError, true);
+      const idToken = await tokenFromCurrentUser(authOrError);
       return exchangeFirebaseIdToken(
         idToken,
         pending?.provider || 'firebase-retry',

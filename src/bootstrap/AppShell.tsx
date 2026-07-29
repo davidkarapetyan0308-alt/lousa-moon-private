@@ -179,6 +179,7 @@ function NavigationCoordinator({ onStartupRouteReady }: { onStartupRouteReady: (
   const guestAuthFlowActive = useUserStore((state) => state.guestAuthFlowActive);
   const migrationReviewRequired = useCycleStore((state) => state.migrationReviewRequired);
   const sessionState = useUserStore((state) => state.sessionState);
+  const sessionError = useUserStore((state) => state.sessionError);
   const [hydrated, setHydrated] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [startupWarning, setStartupWarning] = useState<string | null>(null);
@@ -310,6 +311,8 @@ function NavigationCoordinator({ onStartupRouteReady }: { onStartupRouteReady: (
               backendRetryAttemptRef.current = 0;
               return;
             }
+          } else {
+            useUserStore.getState().setSessionState('local_limited_mode', result.error.message);
           }
           backendRetryAttemptRef.current = Math.min(backendRetryAttemptRef.current + 1, delays.length - 1);
           setBackendRetryEpoch((value) => value + 1);
@@ -437,7 +440,7 @@ function NavigationCoordinator({ onStartupRouteReady }: { onStartupRouteReady: (
         <View style={styles.limitedBanner} accessibilityRole="alert">
           <View style={styles.limitedBannerText}>
             <Text style={styles.limitedBannerTitle}>Серверная сессия не создана</Text>
-            <Text style={styles.limitedBannerBody}>Локальные данные доступны, но синхронизация, адрес и Box временно заблокированы.</Text>
+            <Text style={styles.limitedBannerBody}>{sessionError || 'Локальные данные доступны, но синхронизация, адрес и Box временно заблокированы.'}</Text>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -452,6 +455,8 @@ function NavigationCoordinator({ onStartupRouteReady }: { onStartupRouteReady: (
                     const nextState = result.data.sessionState || (result.data.backendSessionReady === false ? 'local_limited_mode' : 'authenticated');
                     useUserStore.getState().setSessionState(nextState, result.data.limitedReason || null);
                     if (nextState === 'authenticated') backendRetryAttemptRef.current = 0;
+                  } else if (result) {
+                    useUserStore.getState().setSessionState('local_limited_mode', result.error.message);
                   }
                 })
                 .finally(() => setBackendRetrying(false));
