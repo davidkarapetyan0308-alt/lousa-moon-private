@@ -1266,7 +1266,9 @@
       const openedAt = courier.shiftOpenedAt || courier.shift?.openedAt || courier.shift?.startedAt || courier.activeShift?.openedAt || courier.activeShift?.startedAt || courier.currentShift?.openedAt || courier.currentShift?.startedAt;
       const closedAt = courier.shiftClosedAt || courier.shift?.closedAt || courier.shift?.endedAt || courier.activeShift?.closedAt || courier.activeShift?.endedAt || courier.lastShift?.closedAt || courier.lastShift?.endedAt;
       const raw = String(courier.shiftStatus || courier.activeShift?.status || courier.shift?.status || courier.currentShift?.status || '').toUpperCase();
-      const open = courier.isOnShift === true || courier.onShift === true || courier.shiftOpen === true || /ON_SHIFT|SHIFT_OPEN|ONLINE|ACTIVE|STARTED/.test(raw) || (courier.activeShift && !closedAt);
+      // The production courier API uses OPEN, while older clients used ACTIVE/ON_SHIFT.
+      // Keep all supported values here so a live shift is never hidden from dispatch.
+      const open = courier.isOnShift === true || courier.onShift === true || courier.shiftOpen === true || /OPEN|ON_SHIFT|SHIFT_OPEN|ONLINE|ACTIVE|STARTED/.test(raw) || (courier.activeShift && !closedAt);
       return { open: Boolean(open && !closedAt), openedAt, closedAt, raw: raw || (open ? 'ON_SHIFT' : 'OFF_SHIFT') };
     }
     const adminMaps = new WeakMap();
