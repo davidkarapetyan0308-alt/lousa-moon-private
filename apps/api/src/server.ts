@@ -425,7 +425,9 @@ async function issueSession(userId: string, req?: IncomingMessage) {
 }
 
 function userPayload(user: any) {
-  return { id: user.id, email: user.email, phone: user.phone ?? null, name: user.name, avatarUri: user.avatarUri ?? null };
+  // The production User table intentionally has no avatar column. Keep the
+  // mobile contract stable without sending unsupported data through Prisma.
+  return { id: user.id, email: user.email, phone: user.phone ?? null, name: user.name, avatarUri: null };
 }
 
 async function sessionPayload(user: any, req: IncomingMessage, extra: JsonObject = {}) {
@@ -460,7 +462,6 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
     throw new ApiError(403, 'FIREBASE_EMAIL_NOT_VERIFIED', 'Confirm your email before creating a LOUSA session.');
   }
   const displayName = str(profile.name || decoded.name || (email ? email.split('@')[0] : 'LOUSA'), 120) || 'LOUSA';
-  const avatarUri = optionalStr(decoded.picture, 500);
 
   try {
     const result = await (prisma as any).$transaction(async (tx: any) => {
@@ -510,7 +511,6 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
             emailVerifiedAt: decoded.email_verified ? now() : null,
             phone,
             name: displayName,
-            avatarUri,
             language: language(profile.language),
             status: 'active',
           },
@@ -521,7 +521,6 @@ async function sessionFromFirebaseIdToken(idToken: string, req: IncomingMessage,
         if (decoded.email_verified && !user.emailVerifiedAt) updates.emailVerifiedAt = now();
         if (phone && !user.phone) updates.phone = phone;
         if (displayName && (!user.name || user.name === 'LOUSA')) updates.name = displayName;
-        if (avatarUri && !user.avatarUri) updates.avatarUri = avatarUri;
         if (Object.keys(updates).length) user = await tx.user.update({ where: { id: user.id }, data: updates });
       }
 
