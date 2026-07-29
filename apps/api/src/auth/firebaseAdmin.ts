@@ -79,13 +79,21 @@ function normalizePrivateKey(value: string) {
   return value.replace(/\\n/g, '\n');
 }
 
+function parseServiceAccountSecret(value: string) {
+  const raw = value.startsWith('base64:')
+    ? Buffer.from(value.slice('base64:'.length), 'base64').toString('utf8')
+    : value;
+  const decoded = JSON.parse(raw);
+  return typeof decoded === 'string' ? JSON.parse(decoded) : decoded;
+}
+
 function serviceAccountFromEnv(env: ApiEnv) {
   if (env.firebaseServiceAccountJson) {
     try {
-      // Render secrets are sometimes pasted as a JSON-encoded string, which
-      // produces one extra quoting layer. Accept both raw JSON and that form.
-      const decoded = JSON.parse(env.firebaseServiceAccountJson);
-      const parsed = typeof decoded === 'string' ? JSON.parse(decoded) : decoded;
+      // Render accepts a raw JSON value, JSON wrapped in one extra string
+      // layer, or a base64: prefix. The latter avoids newline corruption in
+      // browser-based environment editors.
+      const parsed = parseServiceAccountSecret(env.firebaseServiceAccountJson);
       return {
         projectId: parsed.project_id || parsed.projectId || env.firebaseProjectId || undefined,
         clientEmail: parsed.client_email || parsed.clientEmail,
