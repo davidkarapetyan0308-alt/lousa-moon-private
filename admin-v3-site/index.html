@@ -1,0 +1,2465 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LOUSA Operations</title>
+  <link href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --panel-2: #fbfcfd;
+      --ink: #18202a;
+      --muted: #66717f;
+      --line: #dfe4ea;
+      --line-strong: #c9d1db;
+      --brand: #8c3f62;
+      --brand-dark: #642641;
+      --blue: #2367c6;
+      --green: #247651;
+      --amber: #9b6414;
+      --red: #b8324f;
+      --green-bg: #eaf6ef;
+      --amber-bg: #fff3d8;
+      --red-bg: #fde8ed;
+      --blue-bg: #eaf1fc;
+      --shadow: 0 12px 32px rgba(24, 32, 42, .08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+      background: linear-gradient(90deg, #fff 0 34%, #f6f7f9 34% 100%);
+    }
+    .login-card {
+      padding: 44px;
+      align-self: center;
+    }
+    .login-card h1 { margin: 36px 0 10px; font-size: 30px; line-height: 1.1; }
+    .login-card p { color: var(--muted); margin: 0 0 22px; }
+    .brand {
+      font-weight: 800;
+      letter-spacing: .16em;
+      color: var(--brand-dark);
+    }
+    .brand small {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      letter-spacing: .28em;
+      color: var(--muted);
+    }
+    .login-visual {
+      display: grid;
+      align-content: center;
+      padding: 44px;
+    }
+    .login-visual .board {
+      max-width: 760px;
+      display: grid;
+      gap: 14px;
+    }
+    .preview-row {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 14px;
+    }
+    .preview-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .preview-card b { display: block; font-size: 24px; margin-top: 8px; }
+    .form-field { display: grid; gap: 6px; margin: 12px 0; color: var(--muted); font-size: 12px; }
+    .form-field input, .form-field select, .form-field textarea, .search, .select, .input {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 12px;
+      min-height: 40px;
+      outline: none;
+    }
+    .form-field textarea { min-height: 96px; resize: vertical; }
+    .form-field input:focus, .form-field select:focus, .form-field textarea:focus, .search:focus, .select:focus, .input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(35, 103, 198, .13);
+    }
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 256px minmax(0, 1fr);
+    }
+    .side {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      padding: 24px 14px;
+      overflow: auto;
+    }
+    .side-section {
+      margin: 22px 8px 6px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .nav { display: grid; gap: 4px; margin-top: 24px; }
+    .nav button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #4d5967;
+      padding: 10px 11px;
+      text-align: left;
+    }
+    .nav button:hover { background: #f3f5f7; }
+    .nav button.active {
+      background: var(--blue-bg);
+      color: #174b92;
+      font-weight: 800;
+    }
+    .nav button:disabled { opacity: .45; cursor: not-allowed; }
+    .main { padding: 22px 26px 34px; min-width: 0; }
+    .top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 18px;
+    }
+    .top h1 { margin: 0; font-size: 28px; line-height: 1.15; }
+    .subtitle { margin: 6px 0 0; color: var(--muted); }
+    .top-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+    .global-search { width: min(380px, 38vw); }
+    .userbox { color: var(--muted); font-size: 12px; text-align: right; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+    .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .filter-chips {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin: -4px 0 12px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .chip button {
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      padding: 0;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .batch-bar {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border: 1px solid #b7cdec;
+      border-radius: 8px;
+      background: #f3f8ff;
+      box-shadow: 0 8px 18px rgba(35, 103, 198, .08);
+    }
+    .checkbox-cell { width: 42px; }
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--blue);
+    }
+    .btn {
+      min-height: 40px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--brand);
+      color: #fff;
+      padding: 10px 13px;
+      font-weight: 800;
+    }
+    .btn:hover { background: var(--brand-dark); }
+    .btn.secondary {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line-strong);
+    }
+    .btn.secondary:hover { background: #f5f7f9; }
+    .btn.blue { background: var(--blue); }
+    .btn.danger { background: var(--red); }
+    .btn.ghost {
+      min-height: 34px;
+      background: transparent;
+      color: var(--blue);
+      padding: 7px 8px;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .status-line {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .kpi span { color: var(--muted); font-size: 12px; }
+    .kpi b { display: block; margin-top: 5px; font-size: 26px; line-height: 1.1; }
+    .kpi small { display: block; margin-top: 6px; color: var(--muted); }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, .75fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .layout.wide { grid-template-columns: minmax(0, 1fr); }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .card h2 { margin: 0; font-size: 18px; }
+    .card h3 { margin: 0; font-size: 15px; }
+    .stack { display: grid; gap: 8px; }
+    .work-card {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+    .work-card.critical { border-left-color: var(--red); background: #fffafb; }
+    .work-card.warn { border-left-color: var(--amber); }
+    .work-card.good { border-left-color: var(--green); }
+    .work-card header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+    .work-card p { margin: 6px 0 0; color: var(--muted); }
+    .work-card footer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 11px; align-items: center; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #eef1f4;
+      color: #566171;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .badge.good { background: var(--green-bg); color: var(--green); }
+    .badge.warn { background: var(--amber-bg); color: var(--amber); }
+    .badge.bad { background: var(--red-bg); color: var(--red); }
+    .badge.info { background: var(--blue-bg); color: var(--blue); }
+    .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 10px;
+    }
+    .lane {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-height: 170px;
+      padding: 10px;
+    }
+    .lane h3 { display: flex; justify-content: space-between; margin-bottom: 9px; color: #344150; }
+    .command-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .task-list { display: grid; gap: 0; }
+    .task-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      width: 100%;
+      padding: 13px 0;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+    }
+    .task-row:last-child { border-bottom: 0; }
+    .task-row:not(:disabled):hover { color: var(--blue); }
+    .task-row b, .task-row span { display: block; }
+    .task-row span { margin-top: 3px; color: var(--muted); font-size: 13px; }
+    .task-row .badge { justify-self: end; }
+    .summary-list { margin: 0; display: grid; }
+    .summary-list > div {
+      display: grid;
+      grid-template-columns: minmax(130px, .75fr) minmax(0, 1.25fr);
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .summary-list > div:last-child { border-bottom: 0; }
+    .summary-list dt { color: var(--muted); }
+    .summary-list dd { margin: 0; font-weight: 700; word-break: break-word; }
+    .empty-action {
+      display: grid;
+      place-items: center;
+      min-height: 190px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 8px;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { padding: 11px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    th {
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: #fbfcfd; }
+    .mobile-list { display: none; }
+    .order-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 13px;
+    }
+    .order-card header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+    .order-card h3 {
+      margin: 0;
+      color: var(--blue);
+      font-size: 17px;
+    }
+    .order-facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin: 10px 0;
+    }
+    .fact {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+    .fact span {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .fact b {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .empty {
+      padding: 26px 12px;
+      color: var(--muted);
+      text-align: center;
+      border: 1px dashed var(--line-strong);
+      border-radius: 8px;
+      background: var(--panel-2);
+    }
+    .notice {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 11px 12px;
+      color: var(--muted);
+    }
+    .notice.bad { background: var(--red-bg); border-color: #f3bfca; color: var(--red); }
+    .notice.good { background: var(--green-bg); border-color: #b9dfc8; color: var(--green); }
+    .notice.info { background: var(--blue-bg); border-color: #b8cff4; color: var(--blue); }
+    .map {
+      position: relative;
+      height: 320px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7eef3;
+      touch-action: none;
+      user-select: none;
+    }
+    .map.mini { height: 220px; }
+    .map.fullscreen {
+      position: fixed;
+      inset: 12px;
+      z-index: 60;
+      height: auto;
+      border-radius: 8px;
+      box-shadow: 0 24px 80px rgba(24, 32, 42, .34);
+    }
+    body.map-lock { overflow: hidden; }
+    .map-surface {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      cursor: grab;
+      background: #fbf4f7;
+    }
+    .map-surface.vector {
+      cursor: default;
+      background: #f4f0f2;
+    }
+    .map-canvas {
+      position: absolute;
+      inset: 0;
+    }
+    .map-canvas .maplibregl-canvas { outline: none; }
+    .lousa-moped-marker {
+      width: 54px;
+      height: 54px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .lousa-moped-marker img {
+      display: block;
+      width: 54px;
+      height: 54px;
+      object-fit: contain;
+      transform: rotate(var(--heading, 0deg));
+      filter: drop-shadow(0 3px 5px rgba(24, 32, 42, .3));
+    }
+    .map-surface.unconfigured {
+      cursor: default;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(181,68,116,.08), transparent 260px),
+        #fbf4f7;
+    }
+    .map-surface.dragging { cursor: grabbing; }
+    .map-tile-layer {
+      position: absolute;
+      inset: 0;
+    }
+    .map-tile-layer.stale {
+      opacity: .48;
+      filter: saturate(.72) contrast(.96) blur(.5px);
+    }
+    .map-tile-layer.live {
+      filter: saturate(.84) contrast(.98) brightness(1.03);
+    }
+    .map-tile {
+      position: absolute;
+      width: 256px;
+      height: 256px;
+      image-rendering: auto;
+      background: #fbf4f7;
+      opacity: 0;
+      transition: opacity .16s ease;
+    }
+    .map-tile.loaded { opacity: 1; }
+    .map-tile.failed { opacity: 0; }
+    .map-route-layer,
+    .map-marker-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .map-route-line {
+      fill: none;
+      stroke: var(--brand);
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-opacity: .82;
+    }
+    .map-route-line.pending {
+      stroke: var(--blue);
+      stroke-dasharray: 8 8;
+      stroke-width: 4;
+      stroke-opacity: .74;
+    }
+    .map-controls {
+      position: absolute;
+      z-index: 8;
+      top: 10px;
+      right: 10px;
+      display: grid;
+      gap: 6px;
+    }
+    .map-control {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(255,255,255,.95);
+      color: var(--ink);
+      font-weight: 900;
+      box-shadow: 0 6px 18px rgba(24, 32, 42, .12);
+    }
+    .map-control:hover { background: #fff; }
+    .map-filterbar {
+      position: absolute;
+      z-index: 8;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: calc(100% - 74px);
+    }
+    .map-filter {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 11px;
+      background: rgba(255,255,255,.78);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 6px 18px rgba(24, 32, 42, .08);
+    }
+    .map-filter.active {
+      border-color: rgba(158, 70, 106, .38);
+      background: rgba(251,244,247,.96);
+      color: var(--brand);
+    }
+    .map.map-unavailable .map-controls { display: none; }
+    .map.map-unavailable .map-filterbar { display: none; }
+    .map-status {
+      position: absolute;
+      z-index: 8;
+      left: 10px;
+      bottom: 10px;
+      max-width: min(540px, calc(100% - 20px));
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.95);
+      color: var(--muted);
+      font-size: 12px;
+      box-shadow: 0 6px 18px rgba(24, 32, 42, .1);
+    }
+    .map-unconfigured-panel {
+      width: min(620px, 100%);
+      display: grid;
+      justify-items: center;
+      gap: 12px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .map-unconfigured-panel h3 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 18px;
+    }
+    .map-unconfigured-panel p {
+      margin: 0;
+      max-width: 520px;
+      line-height: 1.45;
+    }
+    .map-unconfigured-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .map-unconfigured-meta span {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .map-unconfigured-point {
+      display: inline-grid;
+      grid-template-columns: 74px 1fr;
+      align-items: center;
+      gap: 12px;
+      width: min(430px, 100%);
+      margin-top: 6px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      text-align: left;
+      box-shadow: 0 8px 20px rgba(24, 32, 42, .08);
+    }
+    .map-unconfigured-point img {
+      width: 38px;
+      height: 84px;
+      object-fit: contain;
+      justify-self: center;
+      filter: drop-shadow(0 6px 10px rgba(24, 32, 42, .16));
+    }
+    .map-unconfigured-point b { color: var(--ink); }
+    .map-grid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      transform: scale(1.02);
+    }
+    .map-grid img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: saturate(.86) contrast(.96);
+    }
+    .map-marker {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      transform: translate(-50%, -100%);
+      min-width: 30px;
+      min-height: 30px;
+      display: grid;
+      place-items: center;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      box-shadow: 0 7px 18px rgba(24, 32, 42, .22);
+    }
+    .map-marker.courier { background: var(--green); }
+    .map-marker.problem { background: var(--red); }
+    .map-marker.moped {
+      width: 58px;
+      height: 68px;
+      min-width: 58px;
+      min-height: 68px;
+      border: 1px solid rgba(158, 70, 106, .20);
+      border-radius: 29px;
+      background: rgba(217, 133, 165, .23);
+      box-shadow: 0 7px 16px rgba(24, 32, 42, .24);
+    }
+    .map-marker.moped img {
+      width: 42px;
+      height: 60px;
+      display: block;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 7px rgba(24, 32, 42, .16));
+    }
+    .map-label {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      transform: translate(-50%, 6px);
+      max-width: 170px;
+      padding: 5px 8px;
+      border-radius: 7px;
+      background: rgba(255,255,255,.95);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      box-shadow: 0 5px 14px rgba(24, 32, 42, .12);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .map-empty {
+      min-height: 190px;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line-strong);
+      border-radius: 8px;
+      background: var(--panel-2);
+    }
+    .map-empty strong {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    .map-empty .toolbar {
+      justify-content: center;
+      margin-bottom: 0;
+    }
+    .data-contract {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .contract-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+      color: var(--muted);
+    }
+    .contract-item b {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 3px;
+    }
+    .courier-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+    .courier-card header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+    }
+    .courier-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .full { grid-column: 1 / -1; }
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(18, 24, 32, .42);
+    }
+    .drawer {
+      position: fixed;
+      z-index: 21;
+      inset: 0 0 0 auto;
+      width: min(620px, 100%);
+      background: #fff;
+      border-left: 1px solid var(--line);
+      box-shadow: -18px 0 44px rgba(24, 32, 42, .18);
+      padding: 20px;
+      overflow: auto;
+    }
+    .detail-row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .detail-row span:first-child { color: var(--muted); font-size: 12px; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(18, 24, 32, .48);
+    }
+    .modal {
+      width: min(560px, 100%);
+      max-height: 92vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .modal h2 { margin: 0 0 12px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .toast {
+      position: fixed;
+      z-index: 40;
+      right: 18px;
+      bottom: 18px;
+      max-width: 430px;
+      padding: 12px 14px;
+      background: #17202b;
+      color: #fff;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .toast.error { background: var(--red); }
+    .toast.success { background: var(--green); }
+    .muted { color: var(--muted); }
+    .error { color: var(--red); font-weight: 800; }
+    .money { font-variant-numeric: tabular-nums; }
+    .skeleton {
+      min-height: 90px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #f0f2f5, #fafafa, #f0f2f5);
+      background-size: 240% 100%;
+      animation: pulse 1.4s infinite;
+    }
+    @keyframes pulse { to { background-position: -240% 0; } }
+    @media (max-width: 1120px) {
+      .app { grid-template-columns: 1fr; }
+      .side { position: static; height: auto; }
+      .nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .side-section { grid-column: 1 / -1; }
+      .layout, .preview-row { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+      .lane-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .global-search { width: 100%; }
+    }
+    @media (max-width: 680px) {
+      .login-wrap { grid-template-columns: 1fr; background: #fff; }
+      .login-visual { display: none; }
+      .login-card, .main { padding: 18px; }
+      .top { grid-template-columns: 1fr; }
+      .top-actions { justify-content: stretch; }
+      .top-actions > * { flex: 1; }
+      .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .kpis, .lane-grid, .split, .data-contract, .command-grid { grid-template-columns: 1fr; }
+      .detail-row { grid-template-columns: 1fr; gap: 3px; }
+      .orders-table { display: none; }
+      .mobile-list { display: grid; gap: 10px; }
+      .order-facts { grid-template-columns: 1fr; }
+      .order-card footer .btn, .order-card footer .select { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <section id="login" class="login-wrap">
+    <div class="login-card">
+      <div class="brand">LOUSA<small>OPERATIONS</small></div>
+      <h1>Вход в смену заботы</h1>
+      <p>Главная задача команды: доставить бокс за день до начала цикла, вовремя и бережно.</p>
+      <label class="form-field">Email администратора<input id="email" type="email" autocomplete="username" /></label>
+      <label class="form-field">Пароль<input id="password" type="password" autocomplete="current-password" /></label>
+      <p id="loginError" class="error"></p>
+      <button id="loginButton" class="btn blue">Войти</button>
+    </div>
+    <div class="login-visual">
+      <div class="board">
+        <div class="preview-row">
+          <div class="preview-card"><span>Очередь смены</span><b>Бокс → Сборка → Курьер</b><p class="muted">Все действия подчинены окну заботы: доставить заранее, без суеты для клиентки.</p></div>
+          <div class="preview-card"><span>Контроль</span><b>Окно заботы / GPS / Оплата</b><p class="muted">Риски опоздания видны до того, как клиентке придётся писать в поддержку.</p></div>
+        </div>
+        <div class="preview-card"><span>Приватность</span><b>Только операционные данные</b><p class="muted">Панель показывает дату доставки бокса, но не раскрывает лишние личные детали цикла.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="app" class="app hidden">
+    <aside class="side">
+      <div class="brand">LOUSA<small>OPS</small></div>
+      <nav id="nav" class="nav"></nav>
+    </aside>
+    <main class="main">
+      <header class="top">
+        <div>
+          <h1 id="title">Сегодня</h1>
+          <p id="subtitle" class="subtitle">Кому нужно доставить бокс заботы вовремя</p>
+          <div id="statusLine" class="status-line"></div>
+        </div>
+        <div class="top-actions">
+          <input id="globalSearch" class="search global-search" placeholder="Поиск: заказ, клиент, адрес" />
+          <button class="btn secondary" id="refreshButton">Обновить</button>
+          <button class="btn secondary" id="logout">Выйти</button>
+          <div id="adminName" class="userbox"></div>
+        </div>
+      </header>
+      <section id="content"><div class="skeleton"></div></section>
+    </main>
+  </section>
+
+  <div id="overlay" class="modal-backdrop hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const API_BASE_URL = 'https://lousa-moon-api.onrender.com';
+    const ACCESS_TOKEN_KEY = 'lousa_operations_v3_access_token';
+    const state = { admin: null, accessToken: sessionStorage.getItem(ACCESS_TOKEN_KEY), view: 'today', filters: {}, cache: {}, selectedOrders: new Set(), autoRefresh: false, refreshTimer: null, dispatchTimer: null };
+    const navGroups = [
+      ['Смена', 'today', 'Сводка смены'],
+      ['Смена', 'orders', 'Очередь боксов'],
+      ['Смена', 'packing', 'Сборка'],
+      ['Смена', 'dispatch', 'Курьеры и карта'],
+      ['Клиентки', 'customers', 'Клиентки'],
+      ['Клиентки', 'subscriptions', 'Планы заботы'],
+      ['Клиентки', 'support', 'Поддержка'],
+      ['Управление', 'catalog', 'Каталог и склад'],
+      ['Управление', 'team', 'Команда и доступ'],
+      ['Управление', 'project', 'Проект'],
+      ['Контроль', 'audit', 'Журнал действий']
+    ];
+    const roleAccess = {
+      owner: ['*'],
+      admin: ['*'],
+      support: ['today','orders','customers','subscriptions','support'],
+      packer: ['today','orders','packing'],
+      courier_manager: ['today','orders','dispatch','customers'],
+      courier: ['today','dispatch'],
+      readonly: ['today','orders','dispatch','customers','subscriptions','catalog','project'],
+      catalog_manager: ['today','catalog'],
+      viewer: ['today']
+    };
+    const viewMeta = {
+      today: ['Сводка смены', 'Что требует решения прямо сейчас'],
+      orders: ['Очередь боксов', 'Проверяйте дедлайн заботы и двигайте бокс по процессу'],
+      packing: ['Сборка', 'Боксы, которые надо собрать и передать курьеру'],
+      dispatch: ['Курьеры и карта', 'Назначение, связь и контроль живой смены'],
+      support: ['Поддержка', 'Диалоги клиенток и курьеров'],
+      customers: ['Клиентки', 'Аккаунт, адреса, планы и история заказов'],
+      subscriptions: ['Планы заботы', 'Регулярные боксы и ближайшие доставки'],
+      catalog: ['Каталог и склад', 'Состав боксов, цены и остатки'],
+      team: ['Команда и доступ', 'Роли сотрудников и безопасность входа'],
+      project: ['Проект', 'Состояние данных и подключённых сервисов'],
+      audit: ['Журнал действий', 'Проверяемые изменения в операционной системе']
+    };
+
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function attr(value) { return esc(value).replace(/`/g, '&#96;'); }
+    function plain(value) { return String(value || '').toLowerCase().trim(); }
+    function role() { return String(state.admin?.role || 'viewer').toLowerCase(); }
+    function can(view) {
+      const list = roleAccess[role()] || roleAccess.viewer;
+      return list.includes('*') || list.includes(view);
+    }
+    async function api(path, options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+      if (state.accessToken) headers.Authorization = `Bearer ${state.accessToken}`;
+      const response = await fetch(API_BASE_URL + path, { headers, ...options });
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        state.accessToken = null;
+        sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      }
+      if (!response.ok) throw new Error(body.error?.message || body.message || 'API вернул ошибку.');
+      return body;
+    }
+    async function courierSupportApi(path, options = {}) {
+      throw new Error('Канал Courier support станет доступен после подключения отдельного courier backend.');
+    }
+    function money(value, currency = 'AMD') {
+      if (value === undefined || value === null || value === '') return '—';
+      const amount = Number(value) > 9999 ? Number(value) / 100 : Number(value);
+      return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: currency || 'AMD', maximumFractionDigits: 0 }).format(amount);
+    }
+    function stamp(value) {
+      if (!value) return '—';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return esc(value);
+      return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
+    }
+    function tone(value) {
+      const s = String(value || '').toUpperCase();
+      if (/ISSUE|FAILED|CANCEL|REFUND|EXPIRED|BLOCK|ERROR|OVERDUE|STALE|OFFLINE/.test(s)) return 'bad';
+      if (/PENDING|PACKING|READY|OPEN|PAID|CREATED|WAIT|NEW/.test(s)) return 'warn';
+      if (/ACTIVE|ASSIGNED|PICKED|OUT|DELIVERED|RESOLVED|ONLINE|SUCCEEDED|COMPLETE/.test(s)) return 'good';
+      return 'info';
+    }
+    function badge(value, label) {
+      const text = label || String(value || '—').replaceAll('_', ' ');
+      return `<span class="badge ${tone(value)}">${esc(text)}</span>`;
+    }
+    function toast(message, type = 'success') {
+      const el = $('toast');
+      el.textContent = message;
+      el.className = `toast ${type}`;
+      clearTimeout(toast.timer);
+      toast.timer = setTimeout(() => el.classList.add('hidden'), 3600);
+    }
+    function empty(title, body = '') {
+      return `<div class="empty"><b>${esc(title)}</b>${body ? `<br><span>${esc(body)}</span>` : '<br><span>Обновите данные или измените фильтры.</span>'}</div>`;
+    }
+    function kpis(items) {
+      return `<div class="kpis">${items.slice(0, 4).map(item => `<article class="kpi"><span>${esc(item.label)}</span><b>${esc(item.value ?? '—')}</b>${item.hint ? `<small>${esc(item.hint)}</small>` : ''}</article>`).join('')}</div>`;
+    }
+    function table(rows, columns, emptyText = 'Нет данных') {
+      if (!rows.length) return empty(emptyText);
+      return `<div class="table-wrap"><table><thead><tr>${columns.map(c => `<th>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(c => `<td>${c.render(row) ?? '—'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    }
+    function modal(title, body, onSubmit, submitLabel = 'Сохранить') {
+      const overlay = $('overlay');
+      overlay.innerHTML = `<section class="modal" role="dialog" aria-modal="true"><h2>${esc(title)}</h2>${body}<div class="modal-actions"><button class="btn secondary" type="button" data-close>Отмена</button><button class="btn" type="button" data-submit>${esc(submitLabel)}</button></div></section>`;
+      overlay.classList.remove('hidden');
+      overlay.querySelector('[data-close]').onclick = closeModal;
+      overlay.onclick = event => { if (event.target === overlay) closeModal(); };
+      overlay.querySelector('[data-submit]').onclick = async () => {
+        try {
+          const result = await onSubmit(overlay.querySelector('.modal'));
+          if (result !== false) closeModal();
+        } catch (error) {
+          const existing = overlay.querySelector('[data-modal-error]');
+          existing?.remove();
+          const errorBox = document.createElement('div');
+          errorBox.className = 'notice bad';
+          errorBox.setAttribute('data-modal-error', 'true');
+          errorBox.textContent = error.message;
+          overlay.querySelector('.modal h2').after(errorBox);
+          toast(error.message, 'error');
+        }
+      };
+    }
+    function closeModal() {
+      $('overlay').classList.add('hidden');
+      $('overlay').innerHTML = '';
+    }
+    function closeDrawer() {
+      document.querySelector('.drawer')?.remove();
+      document.querySelector('.drawer-backdrop')?.remove();
+    }
+    function drawer(title, body) {
+      closeDrawer();
+      const backdrop = document.createElement('div');
+      backdrop.className = 'drawer-backdrop';
+      backdrop.onclick = closeDrawer;
+      const panel = document.createElement('section');
+      panel.className = 'drawer';
+      panel.innerHTML = `<div class="card-head"><h2>${esc(title)}</h2><button class="btn secondary" id="drawerClose">Закрыть</button></div>${body}`;
+      document.body.append(backdrop, panel);
+      panel.querySelector('#drawerClose').onclick = closeDrawer;
+    }
+    function renderNav() {
+      const groups = [];
+      for (const [group, view, label] of navGroups) {
+        let bucket = groups.find(x => x.group === group);
+        if (!bucket) groups.push(bucket = { group, items: [] });
+        bucket.items.push([view, label]);
+      }
+      $('nav').innerHTML = groups.map(group => `<div class="side-section">${esc(group.group)}</div>${group.items.map(([view, label]) => `<button data-view="${view}" class="${state.view === view ? 'active' : ''}" ${can(view) ? '' : 'disabled'}><span>${esc(label)}</span></button>`).join('')}`).join('');
+    }
+    function setView(view) {
+      if (!views[view] || !can(view)) return;
+      if (state.view === 'dispatch' && view !== 'dispatch') stopDispatchLive();
+      state.view = view;
+      const [title, subtitle] = viewMeta[view] || ['LOUSA', ''];
+      $('title').textContent = title;
+      $('subtitle').textContent = subtitle;
+      renderNav();
+      load();
+    }
+    function appliedChips(items) {
+      const active = items.filter(item => item.value);
+      if (!active.length) return '';
+      return `<div class="filter-chips"><span class="muted">Фильтры:</span>${active.map(item => `<span class="chip">${esc(item.label)}: <b>${esc(item.text || item.value)}</b><button type="button" onclick="${item.clear}">×</button></span>`).join('')}<button class="btn ghost" onclick="${items[0].clearAll || 'clearFilters()'}">Сбросить всё</button></div>`;
+    }
+    function clearFilters(scope) {
+      if (scope === 'orders') {
+        state.filters.orderSearch = '';
+        state.filters.orderStatus = '';
+        state.filters.orderAction = '';
+        state.filters.orderSort = '';
+        renderOrders();
+      } else if (scope === 'dispatch') {
+        state.filters.dispatchSearch = '';
+        state.filters.dispatchStatus = '';
+        state.filters.dispatchPriority = '';
+        dispatch();
+      }
+    }
+    function stopDispatchLive() {
+      if (!state.dispatchTimer) return;
+      clearInterval(state.dispatchTimer);
+      state.dispatchTimer = null;
+    }
+    function ensureDispatchLive() {
+      if (state.view !== 'dispatch' || state.dispatchTimer) return;
+      state.dispatchTimer = setInterval(() => {
+        if (state.view === 'dispatch') dispatch().catch(error => console.warn(error));
+      }, 15000);
+    }
+    async function load() {
+      if (state.view !== 'dispatch') stopDispatchLive();
+      $('statusLine').textContent = 'Обновляю данные...';
+      $('content').innerHTML = '<div class="skeleton"></div>';
+      try {
+        await views[state.view]();
+        $('statusLine').textContent = `API подключён · обновлено ${new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date())}`;
+      } catch (error) {
+        $('statusLine').innerHTML = `<span class="error">${esc(error.message)}</span>`;
+        $('content').innerHTML = `<div class="notice bad"><b>Не удалось загрузить раздел.</b><br>${esc(error.message)}</div>`;
+      }
+    }
+    function workCard(title, status, lines = [], actions = '', extraClass = '') {
+      return `<article class="work-card ${extraClass || tone(status)}"><header><div><h3>${esc(title)}</h3>${lines.map(line => `<p>${line}</p>`).join('')}</div>${badge(status)}</header>${actions ? `<footer>${actions}</footer>` : ''}</article>`;
+    }
+    function orderTitle(order) { return order.code || order.orderCode || order.id || 'Заказ'; }
+    function careDueValue(entity) {
+      return entity?.careDueAt
+        || entity?.targetDeliveryDate
+        || entity?.targetDeliveryAt
+        || entity?.deliverBefore
+        || entity?.deliveryDueAt
+        || entity?.nextDeliveryDate
+        || entity?.subscription?.nextDeliveryDate
+        || entity?.delivery?.targetDeliveryDate
+        || entity?.delivery?.deliverBefore
+        || entity?.delivery?.scheduledFor
+        || entity?.deliveryWindow
+        || entity?.timeWindow
+        || '';
+    }
+    function careWindow(entity) {
+      const value = careDueValue(entity);
+      return value ? `Доставить до: ${stamp(value)}` : 'Дата не выбрана';
+    }
+    function careRisk(entity) {
+      const raw = careDueValue(entity);
+      const due = raw ? new Date(raw) : null;
+      if (!due || Number.isNaN(due.getTime())) return ['warn', 'Нужно назначить дату'];
+      const hours = (due.getTime() - Date.now()) / 36e5;
+      if (hours < 0) return ['bad', 'Опоздание'];
+      if (hours <= 24) return ['warn', 'Сегодня критично'];
+      return ['good', 'В срок'];
+    }
+    function careCell(entity) {
+      const raw = careDueValue(entity);
+      const risk = careRisk(entity);
+      if (!raw) {
+        return `<div><b>Дата не выбрана</b><br><span class="muted">Нужно назначить доставку бокса</span></div>`;
+      }
+      return `<div><b>${esc(careWindow(entity))}</b><br><span class="badge ${risk[0]}">${esc(risk[1])}</span></div>`;
+    }
+    function num(value) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    function coordsFrom(entity) {
+      const candidates = [
+        entity,
+        entity?.location,
+        entity?.lastLocation,
+        entity?.currentLocation,
+        entity?.lastKnownLocation,
+        entity?.activeShift?.startLocation,
+        entity?.activeShift?.currentLocation,
+        entity?.shift?.startLocation,
+        entity?.shift?.currentLocation,
+        entity?.geo,
+        entity?.coordinates,
+        entity?.delivery,
+        entity?.delivery?.location,
+        entity?.delivery?.geo,
+        entity?.delivery?.coordinates,
+        entity?.address,
+        entity?.address?.location,
+        entity?.courier,
+        entity?.courier?.location,
+        entity?.courier?.lastLocation
+      ];
+      for (const source of candidates) {
+        if (!source) continue;
+        const lat = num(source.lat ?? source.latitude ?? source.y);
+        const lng = num(source.lng ?? source.lon ?? source.longitude ?? source.x);
+        if (lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
+      }
+      if (Array.isArray(entity?.coordinates) && entity.coordinates.length >= 2) {
+        const lng = num(entity.coordinates[0]);
+        const lat = num(entity.coordinates[1]);
+        if (lat !== null && lng !== null) return { lat, lng };
+      }
+      return null;
+    }
+    function deliveryCoordsFrom(entity) {
+      return coordsFrom(entity?.delivery?.destination)
+        || coordsFrom(entity?.delivery?.address)
+        || coordsFrom(entity?.delivery)
+        || coordsFrom(entity?.destination)
+        || coordsFrom(entity?.address)
+        || coordsFrom(entity);
+    }
+    function courierCoordsFrom(entity) {
+      return coordsFrom(entity?.courier?.lastLocation)
+        || coordsFrom(entity?.courier?.currentLocation)
+        || coordsFrom(entity?.courier?.location)
+        || coordsFrom(entity?.courier)
+        || coordsFrom(entity?.lastCourierLocation);
+    }
+    function headingFrom(entity) {
+      const values = [
+        entity?.heading,
+        entity?.bearing,
+        entity?.lastLocation?.heading,
+        entity?.lastLocation?.bearing,
+        entity?.currentLocation?.heading,
+        entity?.currentLocation?.bearing,
+        entity?.location?.heading,
+        entity?.location?.bearing
+      ];
+      const heading = values.map(Number).find(Number.isFinite);
+      return heading === undefined ? 0 : heading;
+    }
+    function shiftInfo(courier) {
+      const openedAt = courier.shiftOpenedAt || courier.shift?.openedAt || courier.shift?.startedAt || courier.activeShift?.openedAt || courier.activeShift?.startedAt || courier.currentShift?.openedAt || courier.currentShift?.startedAt;
+      const closedAt = courier.shiftClosedAt || courier.shift?.closedAt || courier.shift?.endedAt || courier.activeShift?.closedAt || courier.activeShift?.endedAt || courier.lastShift?.closedAt || courier.lastShift?.endedAt;
+      const raw = String(courier.shiftStatus || courier.activeShift?.status || courier.shift?.status || courier.currentShift?.status || '').toUpperCase();
+      const open = courier.isOnShift === true || courier.onShift === true || courier.shiftOpen === true || /ON_SHIFT|SHIFT_OPEN|ONLINE|ACTIVE|STARTED/.test(raw) || (courier.activeShift && !closedAt);
+      return { open: Boolean(open && !closedAt), openedAt, closedAt, raw: raw || (open ? 'ON_SHIFT' : 'OFF_SHIFT') };
+    }
+    const adminMaps = new WeakMap();
+    const activeAdminMaps = new Set();
+    let lousaMapHealth = null;
+    function worldSize(zoom) { return Math.pow(2, zoom) * 256; }
+    function lngToWorldX(lng, zoom) { return (lng + 180) / 360 * worldSize(zoom); }
+    function latToWorldY(lat, zoom) {
+      const clamped = Math.max(-85.05112878, Math.min(85.05112878, lat));
+      const rad = clamped * Math.PI / 180;
+      return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * worldSize(zoom);
+    }
+    function worldXToLng(x, zoom) { return x / worldSize(zoom) * 360 - 180; }
+    function worldYToLat(y, zoom) {
+      const n = Math.PI - 2 * Math.PI * y / worldSize(zoom);
+      return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    }
+    function projectMapPoint(coords, center, zoom, rect) {
+      const centerX = lngToWorldX(center.lng, zoom);
+      const centerY = latToWorldY(center.lat, zoom);
+      return {
+        x: lngToWorldX(coords.lng, zoom) - centerX + rect.width / 2,
+        y: latToWorldY(coords.lat, zoom) - centerY + rect.height / 2
+      };
+    }
+    async function ensureLousaMapHealth() {
+      if (lousaMapHealth) return lousaMapHealth;
+      lousaMapHealth = Promise.resolve({ ok: true, style: 'openfreemap-positron', tiles: 'available', routing: 'available', provider: 'online' });
+      return lousaMapHealth;
+    }
+    function mopedImage() {
+      return '<img src="/assets/courier-moped.png" alt="" draggable="false" />';
+    }
+    function markerIsCourier(marker) {
+      return String(marker.kind || '').includes('courier') || marker.type === 'courier';
+    }
+    function defaultMapFilters() {
+      return { couriers: true, boxes: true, routes: true };
+    }
+    function mapHtml(markers, title = 'Карта', mini = false, emptyBody = 'Нет координат. Приложение должно отправить latitude/longitude для адреса или курьера.', emptyActions = '', options = {}) {
+      const usable = markers.filter(m => m && m.coords);
+      if (!usable.length) return `<div class="map-empty"><div><strong>${esc(title)}</strong><span>${esc(emptyBody)}</span>${emptyActions ? `<div class="toolbar">${emptyActions}</div>` : ''}</div></div>`;
+      const center = usable.length === 1
+        ? usable[0].coords
+        : {
+            lat: usable.reduce((sum, marker) => sum + marker.coords.lat, 0) / usable.length,
+            lng: usable.reduce((sum, marker) => sum + marker.coords.lng, 0) / usable.length
+          };
+      const payload = { title, center, zoom: options.zoom || (usable.length > 1 ? 13 : 15), markers: usable, routes: options.routes || [] };
+      return `<div class="map ${mini ? 'mini' : ''}" role="application" aria-label="${esc(title)}" data-lousa-map data-map-payload="${attr(JSON.stringify(payload))}">
+        <div class="map-surface"><div class="map-status">Загружаю LOUSA map...</div></div>
+        <div class="map-controls">
+          <button class="map-control" type="button" data-map-action="zoom-in" title="Приблизить">+</button>
+          <button class="map-control" type="button" data-map-action="zoom-out" title="Отдалить">−</button>
+          <button class="map-control" type="button" data-map-action="fit" title="Показать все точки">⌖</button>
+          <button class="map-control" type="button" data-map-action="expand" title="Увеличить карту">⛶</button>
+        </div>
+        <div class="map-filterbar" aria-label="Фильтры карты">
+          <button class="map-filter active" type="button" data-map-filter="couriers">Курьеры</button>
+          <button class="map-filter active" type="button" data-map-filter="boxes">Боксы</button>
+          <button class="map-filter active" type="button" data-map-filter="routes">Маршруты</button>
+        </div>
+      </div>`;
+    }
+    function mapLink(coords, label = 'Открыть карту') {
+      if (!coords) return '';
+      return `<button class="btn secondary" type="button" onclick="focusMapOn(${Number(coords.lat)}, ${Number(coords.lng)})">${esc(label)}</button>`;
+    }
+    function mapPointList(instance) {
+      return [
+        ...instance.state.markers.map(marker => marker.coords),
+        ...instance.state.routes.flatMap(route => route.coords || [])
+      ].filter(point => point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)));
+    }
+    function emptyFeatureCollection() {
+      return { type: 'FeatureCollection', features: [] };
+    }
+    function pointFeature(marker) {
+      return {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [Number(marker.coords.lng), Number(marker.coords.lat)] },
+        properties: { label: String(marker.label || ''), short: String(marker.short || 'Б'), kind: String(marker.kind || '') }
+      };
+    }
+    function vectorMapPayload(instance) {
+      const filters = instance.state.filters || defaultMapFilters();
+      const markers = instance.state.markers.filter(marker => marker?.coords && Number.isFinite(Number(marker.coords.lat)) && Number.isFinite(Number(marker.coords.lng)));
+      const couriers = markers.filter(markerIsCourier);
+      const boxes = markers.filter(marker => !markerIsCourier(marker));
+      const routes = (instance.state.routes || [])
+        .filter(route => route.kind !== 'waiting-routing' || route.enriched)
+        .map(route => ({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: (route.coords || [])
+            .filter(point => point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng)))
+            .map(point => [Number(point.lng), Number(point.lat)]) },
+          properties: { label: String(route.label || 'Маршрут') }
+        }))
+        .filter(feature => feature.geometry.coordinates.length > 1);
+      return {
+        filters,
+        couriers,
+        courierData: { type: 'FeatureCollection', features: couriers.map(pointFeature) },
+        boxData: { type: 'FeatureCollection', features: boxes.map(pointFeature) },
+        routeData: { type: 'FeatureCollection', features: routes }
+      };
+    }
+    function setVectorLayerVisibility(map, ids, visible) {
+      ids.forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+      });
+    }
+    function createVectorLayers(map) {
+      const emptyData = emptyFeatureCollection();
+      map.addSource('lousa-admin-routes', { type: 'geojson', data: emptyData });
+      map.addLayer({ id: 'lousa-admin-route-casing', type: 'line', source: 'lousa-admin-routes', paint: { 'line-color': '#55334e', 'line-width': 7, 'line-opacity': .78 } });
+      map.addLayer({ id: 'lousa-admin-route-line', type: 'line', source: 'lousa-admin-routes', paint: { 'line-color': '#d46d94', 'line-width': 4, 'line-opacity': .95 } });
+      map.addSource('lousa-admin-boxes', { type: 'geojson', data: emptyData });
+      map.addLayer({ id: 'lousa-admin-box-halo', type: 'circle', source: 'lousa-admin-boxes', paint: { 'circle-radius': 14, 'circle-color': '#ffffff', 'circle-opacity': .92, 'circle-stroke-color': '#2367c6', 'circle-stroke-width': 2 } });
+      map.addLayer({ id: 'lousa-admin-box-dot', type: 'circle', source: 'lousa-admin-boxes', paint: { 'circle-radius': 8, 'circle-color': '#2367c6' } });
+      map.addLayer({ id: 'lousa-admin-box-letter', type: 'symbol', source: 'lousa-admin-boxes', layout: { 'text-field': ['get', 'short'], 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true }, paint: { 'text-color': '#ffffff' } });
+    }
+    function makeCourierMopedMarker(instance, marker) {
+      const element = document.createElement('button');
+      const heading = Number(marker.heading ?? marker.bearing ?? marker.coords?.heading);
+      element.type = 'button';
+      element.className = 'lousa-moped-marker';
+      element.title = marker.label || 'Курьер на смене';
+      element.style.setProperty('--heading', `${Number.isFinite(heading) ? heading : 0}deg`);
+      element.innerHTML = mopedImage();
+      element.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        instance.vector?.map?.flyTo({ center: [Number(marker.coords.lng), Number(marker.coords.lat)], zoom: Math.max(instance.vector.map.getZoom(), 15), duration: 280 });
+      });
+      return new window.maplibregl.Marker({ element, anchor: 'center' })
+        .setLngLat([Number(marker.coords.lng), Number(marker.coords.lat)])
+        .addTo(instance.vector.map);
+    }
+    function syncVectorMap(instance) {
+      const vector = instance.vector;
+      if (!vector?.ready) return;
+      const map = vector.map;
+      const data = vectorMapPayload(instance);
+      map.getSource('lousa-admin-routes')?.setData(data.routeData);
+      map.getSource('lousa-admin-boxes')?.setData(data.boxData);
+      setVectorLayerVisibility(map, ['lousa-admin-route-casing', 'lousa-admin-route-line'], data.filters.routes);
+      setVectorLayerVisibility(map, ['lousa-admin-box-halo', 'lousa-admin-box-dot', 'lousa-admin-box-letter'], data.filters.boxes);
+      vector.courierMarkers.forEach(courierMarker => courierMarker.remove());
+      vector.courierMarkers = data.filters.couriers ? data.couriers.map(marker => makeCourierMopedMarker(instance, marker)) : [];
+      const status = instance.surface.querySelector('.map-status');
+      if (status) {
+        const routeCount = data.routeData.features.length;
+        status.textContent = `LOUSA map · Positron · ${data.couriers.length} курьер(а) · ${data.boxData.features.length} бокса${routeCount ? ` · ${routeCount} активный маршрут` : ''}`;
+      }
+    }
+    function fitVectorMap(instance, animate = true) {
+      const map = instance.vector?.map;
+      if (!map) return false;
+      const points = mapPointList(instance);
+      if (!points.length) return true;
+      if (points.length === 1) {
+        map.flyTo({ center: [Number(points[0].lng), Number(points[0].lat)], zoom: Math.max(map.getZoom(), 15), duration: animate ? 280 : 0 });
+        return true;
+      }
+      const bounds = points.reduce((result, point) => result.extend([Number(point.lng), Number(point.lat)]), new window.maplibregl.LngLatBounds());
+      map.fitBounds(bounds, { padding: { top: 74, right: 62, bottom: 58, left: 62 }, maxZoom: 16, duration: animate ? 340 : 0 });
+      return true;
+    }
+    function renderVectorMap(instance) {
+      const { el, surface, state: mapState } = instance;
+      if (!window.maplibregl || !mapState.health?.ok || instance.vector?.failed) return false;
+      el.classList.remove('map-unavailable');
+      el.classList.toggle('fullscreen', Boolean(mapState.fullscreen));
+      document.body.classList.toggle('map-lock', document.querySelector('.map.fullscreen') !== null);
+      surface.classList.remove('unconfigured', 'dragging');
+      if (instance.vector) {
+        syncVectorMap(instance);
+        return true;
+      }
+      surface.classList.add('vector');
+      surface.innerHTML = '<div class="map-canvas"></div><div class="map-status">Загружаю LOUSA map...</div>';
+      const mapCanvas = surface.querySelector('.map-canvas');
+      const vector = { map: null, ready: false, failed: false, courierMarkers: [] };
+      instance.vector = vector;
+      try {
+        vector.map = new window.maplibregl.Map({
+          container: mapCanvas,
+          style: 'https://tiles.openfreemap.org/styles/positron',
+          center: [Number(mapState.center.lng), Number(mapState.center.lat)],
+          zoom: Number(mapState.zoom || 14),
+          attributionControl: false,
+          renderWorldCopies: true
+        });
+        vector.map.once('load', () => {
+          vector.ready = true;
+          createVectorLayers(vector.map);
+          syncVectorMap(instance);
+          requestAnimationFrame(() => {
+            vector.map.resize();
+            fitVectorMap(instance, false);
+          });
+        });
+        vector.map.on('error', event => console.warn('LOUSA map resource failed', event?.error));
+        setTimeout(() => {
+          if (!vector.ready && instance.vector === vector) {
+            const status = surface.querySelector('.map-status');
+            if (status) status.textContent = 'LOUSA map всё ещё загружается. Проверьте соединение с tiles.openfreemap.org.';
+          }
+        }, 10000);
+      } catch (error) {
+        vector.failed = true;
+        console.warn('LOUSA map could not start', error);
+        surface.classList.remove('vector');
+        return false;
+      }
+      return true;
+    }
+    function renderMapTiles(instance) {
+      const { el, surface, state: mapState } = instance;
+      if (mapState.health?.ok && renderVectorMap(instance)) return;
+      const rect = surface.getBoundingClientRect();
+      if (rect.width < 40 || rect.height < 40) return;
+      if (!mapState.health) {
+        el.classList.remove('map-unavailable');
+        surface.innerHTML = '<div class="map-status">Проверяю LOUSA map endpoint...</div>';
+        return;
+      }
+      if (!mapState.health.ok) {
+        const couriers = mapState.markers.filter(marker => String(marker.kind || '').includes('courier') || marker.type === 'courier');
+        const boxes = mapState.markers.filter(marker => !(String(marker.kind || '').includes('courier') || marker.type === 'courier'));
+        el.classList.add('map-unavailable');
+        surface.classList.add('unconfigured');
+        surface.innerHTML = `<div class="map-unconfigured-panel">
+          <h3>Карта LOUSA пока не подключена</h3>
+          <p>Курьеров и GPS мы видим. Саму карту и дороги включим только через настоящий LOUSA map backend, без чужих тайлов и нарисованных маршрутов.</p>
+          <div class="map-unconfigured-meta">
+            <span>${couriers.length} на смене</span>
+            <span>${boxes.length} бокса с координатами</span>
+            <span>${mapState.health.routing === 'available' ? 'routing готов' : 'routing ждёт подключения'}</span>
+          </div>
+          ${couriers.slice(0, 3).map(marker => `<div class="map-unconfigured-point"><img src="/assets/courier-moped.png" alt="" /><div><b>${esc(marker.label || 'Курьер на смене')}</b><br><span>GPS: ${marker.coords.lat.toFixed(5)}, ${marker.coords.lng.toFixed(5)}</span></div></div>`).join('')}
+          ${boxes.length ? `<p>Маршрут появится только когда курьер возьмёт заказ и routing вернёт реальную геометрию.</p>` : ''}
+        </div>`;
+        el.classList.toggle('fullscreen', false);
+        document.body.classList.toggle('map-lock', false);
+        return;
+      }
+      el.classList.remove('map-unavailable');
+      surface.classList.remove('unconfigured');
+      const zoom = mapState.zoom;
+      const renderId = (mapState.renderId || 0) + 1;
+      mapState.renderId = renderId;
+      const filters = mapState.filters || defaultMapFilters();
+      const maxTile = Math.pow(2, zoom);
+      const centerX = lngToWorldX(mapState.center.lng, zoom);
+      const centerY = latToWorldY(mapState.center.lat, zoom);
+      const leftWorld = centerX - rect.width / 2;
+      const topWorld = centerY - rect.height / 2;
+      const startX = Math.floor(leftWorld / 256) - 1;
+      const endX = Math.floor((leftWorld + rect.width) / 256) + 1;
+      const startY = Math.max(0, Math.floor(topWorld / 256) - 1);
+      const endY = Math.min(maxTile - 1, Math.floor((topWorld + rect.height) / 256) + 1);
+      const tiles = [];
+      if (mapState.health.ok) {
+        for (let y = startY; y <= endY; y++) {
+          for (let x = startX; x <= endX; x++) {
+            const wrappedX = ((x % maxTile) + maxTile) % maxTile;
+            tiles.push(`<img class="map-tile" alt="" draggable="false" src="https://a.basemaps.cartocdn.com/light_all/${zoom}/${wrappedX}/${y}.png" style="left:${Math.round(x * 256 - leftWorld)}px;top:${Math.round(y * 256 - topWorld)}px" />`);
+          }
+        }
+      }
+      const drawableRoutes = filters.routes ? (mapState.routes || []).filter(route => route.kind !== 'waiting-routing' || route.enriched) : [];
+      const routeSvg = `<svg class="map-route-layer" width="${Math.round(rect.width)}" height="${Math.round(rect.height)}" viewBox="0 0 ${Math.round(rect.width)} ${Math.round(rect.height)}">${drawableRoutes.map(route => {
+        const points = (route.coords || []).map(point => projectMapPoint(point, mapState.center, zoom, rect)).filter(point => point.x > -80 && point.x < rect.width + 80 && point.y > -80 && point.y < rect.height + 80);
+        if (points.length < 2) return '';
+        return `<polyline class="map-route-line" points="${points.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')}"><title>${esc(route.label || 'Маршрут')}</title></polyline>`;
+      }).join('')}</svg>`;
+      const orderedMarkers = [...mapState.markers].filter(marker => {
+        const courier = markerIsCourier(marker);
+        return courier ? filters.couriers : filters.boxes;
+      }).sort((a, b) => {
+        const ac = markerIsCourier(a);
+        const bc = markerIsCourier(b);
+        return Number(ac) - Number(bc);
+      });
+      const markers = `<div class="map-marker-layer">${orderedMarkers.map(marker => {
+        const point = projectMapPoint(marker.coords, mapState.center, zoom, rect);
+        if (point.x < -80 || point.x > rect.width + 80 || point.y < -80 || point.y > rect.height + 80) return '';
+        const x = point.x.toFixed(1) + 'px';
+        const y = point.y.toFixed(1) + 'px';
+        const isCourier = markerIsCourier(marker);
+        const markerBody = isCourier ? mopedImage() : esc(marker.short || 'Б');
+        const markerClass = isCourier ? 'moped courier' : esc(marker.kind || '');
+        return `<span class="map-marker ${markerClass}" style="--x:${x};--y:${y}" title="${esc(marker.label)}">${markerBody}</span><span class="map-label" style="--x:${x};--y:${y}">${esc(marker.label)}</span>`;
+      }).join('')}</div>`;
+      const status = mapState.health?.ok
+        ? `LOUSA map · ${esc(mapState.health.provider || 'tiles')} · z${zoom}${mapState.health.routing === 'available' ? ' · routing' : ''}`
+        : `Карта LOUSA ожидает подключения backend карты.`;
+      const tileHtml = tiles.join('');
+      const staleTiles = mapState.lastTileHtml && mapState.lastTileHtml !== tileHtml ? `<div class="map-tile-layer stale">${mapState.lastTileHtml}</div>` : '';
+      surface.innerHTML = `${staleTiles}<div class="map-tile-layer live" data-render-id="${renderId}">${tileHtml}</div>${routeSvg}${markers}<div class="map-status">${status}</div>`;
+      const liveTiles = [...surface.querySelectorAll(`.map-tile-layer.live[data-render-id="${renderId}"] .map-tile`)];
+      let settled = 0;
+      const revealTiles = () => {
+        settled += 1;
+        if (mapState.renderId !== renderId) return;
+        if (settled >= Math.max(1, Math.floor(liveTiles.length * .45))) {
+          mapState.lastTileHtml = tileHtml;
+          surface.querySelectorAll('.map-tile-layer.stale').forEach(layer => layer.remove());
+        }
+      };
+      if (!liveTiles.length) {
+        mapState.lastTileHtml = tileHtml;
+      } else {
+        liveTiles.forEach(img => {
+          const done = () => revealTiles();
+          img.addEventListener('load', () => { img.classList.add('loaded'); done(); }, { once: true });
+          img.addEventListener('error', () => { img.classList.add('failed'); done(); }, { once: true });
+          if (img.complete) {
+            img.classList.add(img.naturalWidth > 0 ? 'loaded' : 'failed');
+            done();
+          }
+        });
+        setTimeout(() => {
+          if (mapState.renderId !== renderId) return;
+          liveTiles.forEach(img => { if (!img.classList.contains('loaded') && !img.classList.contains('failed')) img.classList.add('loaded'); });
+          mapState.lastTileHtml = tileHtml;
+          surface.querySelectorAll('.map-tile-layer.stale').forEach(layer => layer.remove());
+        }, 950);
+      }
+      surface.classList.toggle('dragging', Boolean(mapState.dragging));
+      el.classList.toggle('fullscreen', Boolean(mapState.fullscreen));
+      document.body.classList.toggle('map-lock', document.querySelector('.map.fullscreen') !== null);
+    }
+    function fitMap(instance) {
+      if (instance.vector?.map) return fitVectorMap(instance);
+      const points = [
+        ...instance.state.markers.map(marker => marker.coords),
+        ...instance.state.routes.flatMap(route => route.coords || [])
+      ].filter(Boolean);
+      if (!points.length) return;
+      const rect = instance.surface.getBoundingClientRect();
+      let bestZoom = 17;
+      for (let zoom = 17; zoom >= 6; zoom--) {
+        const xs = points.map(point => lngToWorldX(point.lng, zoom));
+        const ys = points.map(point => latToWorldY(point.lat, zoom));
+        if ((Math.max(...xs) - Math.min(...xs) <= rect.width - 80) && (Math.max(...ys) - Math.min(...ys) <= rect.height - 80)) {
+          bestZoom = zoom;
+          break;
+        }
+      }
+      instance.state.center = { lat: points.reduce((sum, point) => sum + point.lat, 0) / points.length, lng: points.reduce((sum, point) => sum + point.lng, 0) / points.length };
+      instance.state.zoom = bestZoom;
+      renderMapTiles(instance);
+    }
+    async function enrichMapRoutes(instance) {
+      if (instance.state.health?.routing !== 'available') return;
+      let changed = false;
+      for (const route of instance.state.routes || []) {
+        if (route.enriched || !Array.isArray(route.coords) || route.coords.length < 2) continue;
+        if (route.requireRouting !== true) continue;
+        const origin = route.coords[0];
+        const destination = route.coords[route.coords.length - 1];
+        const stops = route.coords.slice(1, -1);
+        const result = await fetch('/lousa-map/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ origin, destination, stops, mode: 'scooter' })
+        }).then(r => r.ok ? r.json() : null).catch(() => null);
+        if (Array.isArray(result?.coordinates) && result.coordinates.length > 1) {
+          route.coords = result.coordinates.map(point => ({ lat: point.latitude, lng: point.longitude }));
+          route.kind = 'road';
+          route.enriched = true;
+          changed = true;
+        }
+      }
+      if (changed) renderMapTiles(instance);
+    }
+    function initOperationalMaps() {
+      activeAdminMaps.forEach(instance => {
+        if (document.body.contains(instance.el)) return;
+        instance.vector?.courierMarkers?.forEach(marker => marker.remove());
+        instance.vector?.map?.remove();
+        activeAdminMaps.delete(instance);
+      });
+      document.querySelectorAll('[data-lousa-map]').forEach(el => {
+        if (adminMaps.has(el)) {
+          renderMapTiles(adminMaps.get(el));
+          return;
+        }
+        const payload = JSON.parse(el.getAttribute('data-map-payload') || '{}');
+        const surface = el.querySelector('.map-surface');
+        const instance = { el, surface, vector: null, state: { center: payload.center, zoom: payload.zoom || 14, markers: payload.markers || [], routes: payload.routes || [], filters: defaultMapFilters(), health: null, dragging: false, fullscreen: false, last: null, renderId: 0, lastTileHtml: '', wheelDelta: 0, wheelTimer: null } };
+        adminMaps.set(el, instance);
+        activeAdminMaps.add(instance);
+        ensureLousaMapHealth().then(health => { instance.state.health = health; renderMapTiles(instance); enrichMapRoutes(instance); });
+        surface.addEventListener('pointerdown', event => {
+          if (instance.vector && !instance.vector.failed) return;
+          if (instance.state.health && !instance.state.health.ok) return;
+          instance.state.dragging = true;
+          instance.state.last = { x: event.clientX, y: event.clientY };
+          surface.setPointerCapture?.(event.pointerId);
+          renderMapTiles(instance);
+        });
+        surface.addEventListener('pointermove', event => {
+          if (instance.vector && !instance.vector.failed) return;
+          if (instance.state.health && !instance.state.health.ok) return;
+          if (!instance.state.dragging || !instance.state.last) return;
+          const dx = event.clientX - instance.state.last.x;
+          const dy = event.clientY - instance.state.last.y;
+          instance.state.last = { x: event.clientX, y: event.clientY };
+          const cx = lngToWorldX(instance.state.center.lng, instance.state.zoom) - dx;
+          const cy = latToWorldY(instance.state.center.lat, instance.state.zoom) - dy;
+          instance.state.center = { lat: worldYToLat(cy, instance.state.zoom), lng: worldXToLng(cx, instance.state.zoom) };
+          renderMapTiles(instance);
+        });
+        const stopDrag = () => {
+          if (instance.vector && !instance.vector.failed) return;
+          instance.state.dragging = false;
+          instance.state.last = null;
+          renderMapTiles(instance);
+        };
+        surface.addEventListener('pointerup', stopDrag);
+        surface.addEventListener('pointercancel', stopDrag);
+        el.addEventListener('wheel', event => {
+          if (instance.vector && !instance.vector.failed) return;
+          if (instance.state.health && !instance.state.health.ok) return;
+          event.preventDefault();
+          instance.state.wheelDelta += event.deltaY;
+          if (instance.state.wheelTimer) return;
+          instance.state.wheelTimer = setTimeout(() => {
+            const direction = instance.state.wheelDelta < 0 ? 1 : -1;
+            instance.state.wheelDelta = 0;
+            instance.state.wheelTimer = null;
+            instance.state.zoom = Math.max(6, Math.min(18, instance.state.zoom + direction));
+            renderMapTiles(instance);
+          }, 90);
+        }, { passive: false });
+        el.querySelectorAll('[data-map-action]').forEach(button => {
+          button.addEventListener('click', () => {
+            const action = button.getAttribute('data-map-action');
+            if (action === 'zoom-in' && instance.vector?.map) return instance.vector.map.zoomIn({ duration: 180 });
+            if (action === 'zoom-out' && instance.vector?.map) return instance.vector.map.zoomOut({ duration: 180 });
+            if (action === 'zoom-in') instance.state.zoom = Math.min(18, instance.state.zoom + 1);
+            if (action === 'zoom-out') instance.state.zoom = Math.max(6, instance.state.zoom - 1);
+            if (action === 'fit') return fitMap(instance);
+            if (action === 'expand') {
+              if (instance.state.health && !instance.state.health.ok) {
+                toast('Сначала подключите LOUSA tiles, чтобы разворачивать карту.', 'error');
+                return;
+              }
+              instance.state.fullscreen = !instance.state.fullscreen;
+              button.textContent = instance.state.fullscreen ? '×' : '⛶';
+              if (instance.vector?.map) setTimeout(() => instance.vector.map.resize(), 0);
+            }
+            renderMapTiles(instance);
+          });
+        });
+        el.querySelectorAll('[data-map-filter]').forEach(button => {
+          button.addEventListener('click', () => {
+            const filter = button.getAttribute('data-map-filter');
+            if (!filter || !(filter in instance.state.filters)) return;
+            instance.state.filters[filter] = !instance.state.filters[filter];
+            button.classList.toggle('active', Boolean(instance.state.filters[filter]));
+            renderMapTiles(instance);
+          });
+        });
+        renderMapTiles(instance);
+      });
+    }
+    function focusMapOn(lat, lng) {
+      const el = document.querySelector('[data-lousa-map]');
+      const instance = el ? adminMaps.get(el) : null;
+      if (!instance) return;
+      instance.state.center = { lat, lng };
+      instance.state.zoom = Math.max(instance.state.zoom, 16);
+      if (instance.vector?.map) {
+        instance.vector.map.flyTo({ center: [lng, lat], zoom: Math.max(instance.vector.map.getZoom(), 16), duration: 320 });
+        return;
+      }
+      renderMapTiles(instance);
+    }
+    function courierMapEmpty(couriers, openShiftCouriers) {
+      if (!couriers.length) {
+        return {
+          title: 'Курьеры ещё не созданы',
+          body: 'Создайте аккаунт курьера, затем курьер откроет смену в courier app и разрешит передачу GPS.',
+          actions: '<button class="btn" onclick="newCourier()">Создать аккаунт</button>'
+        };
+      }
+      if (!openShiftCouriers.length) {
+        return {
+          title: 'Нет курьеров на открытой смене',
+          body: 'Это не ошибка карты: сейчас ни один курьер не открыл смену. Когда курьер нажмёт “Открыть смену” в своём приложении, он появится здесь.',
+          actions: '<button class="btn secondary" onclick="dispatch()">Обновить</button><button class="btn" onclick="newCourier()">Создать курьера</button>'
+        };
+      }
+      return {
+        title: 'Смена открыта, но GPS не пришёл',
+        body: 'Courier app должен отправлять lastLocation/currentLocation с latitude и longitude во время открытой смены.',
+        actions: '<button class="btn secondary" onclick="dispatch()">Проверить снова</button>'
+      };
+    }
+    function orderLines(order) {
+      const risk = careRisk(order);
+      return [
+        `${esc(order.customer?.name || order.customerName || 'Клиентка не указана')} · ${money(order.totalMinor ?? order.total, order.currency)}`,
+        careDueValue(order) ? `${esc(careWindow(order))} · <span class="badge ${risk[0]}">${esc(risk[1])}</span>` : '<span class="muted">Дата доставки не выбрана</span>',
+        `${esc(order.delivery?.formattedAddress || order.formattedAddress || order.address || 'Адрес не указан')}`
+      ];
+    }
+    function orderActions(order) {
+      return `<button class="btn secondary" onclick="openOrder('${attr(order.id)}')">Открыть</button>`;
+    }
+    function orderNeedsAction(order) {
+      const s = String(order.status || '').toUpperCase();
+      const payment = String(order.paymentStatus || '').toUpperCase();
+      const delivery = String(order.deliveryStatus || '').toUpperCase();
+      return /ISSUE|FAILED|CANCEL/.test(s + payment + delivery) || /PAID|READY_FOR_COURIER|PENDING_PAYMENT/.test(s);
+    }
+
+    async function today() {
+      const dashboard = await api('/v1/admin/dashboard');
+      state.cache.dashboard = dashboard;
+      const tasks = [
+        { count: Number(dashboard.deliveryIssueTasks || 0), title: 'Разобрать риски доставки', hint: 'Боксы с проблемой требуют решения до дедлайна заботы', view: 'dispatch', status: 'ISSUE' },
+        { count: Number(dashboard.readyForCourierOrders || 0), title: 'Назначить курьера', hint: 'Готовые боксы ждут исполнителя и маршрута', view: 'dispatch', status: 'READY_FOR_COURIER' },
+        { count: Number(dashboard.packingOrders || 0), title: 'Передать в сборку', hint: 'Оплаченные боксы должны быть укомплектованы', view: 'packing', status: 'PACKING' },
+        { count: Number(dashboard.newOrders || 0), title: 'Проверить новые боксы', hint: 'Проверьте адрес и окно заботы перед запуском процесса', view: 'orders', status: 'PENDING_PAYMENT' },
+        { count: Number(dashboard.supportOpenTickets || 0), title: 'Ответить клиенткам', hint: 'Открытые обращения не должны ждать следующей смены', view: 'support', status: 'OPEN' },
+      ].filter(task => task.count > 0);
+      const lowStock = dashboard.lowStock || [];
+      $('content').innerHTML = `
+        ${kpis([
+          { label: 'Новые боксы', value: dashboard.newOrders ?? 0, hint: 'проверить перед запуском' },
+          { label: 'В сборке', value: dashboard.packingOrders ?? 0, hint: 'укомплектовать сегодня' },
+          { label: 'На доставке', value: dashboard.outForDeliveryOrders ?? 0, hint: 'следить на карте' },
+          { label: 'Риски', value: Number(dashboard.deliveryIssueTasks || 0) + Number(dashboard.supportHighPriorityTickets || 0), hint: 'требуют решения' }
+        ])}
+        <div class="command-grid">
+          <section class="card">
+            <div class="card-head"><div><h2>С чего начать</h2><p class="muted">Очередь построена по срочности, а не по времени создания записи.</p></div><button class="btn secondary" onclick="setView('orders')">Все боксы</button></div>
+            ${tasks.length ? `<div class="task-list">${tasks.map(task => `<button class="task-row" type="button" onclick="setView('${task.view}')"><span><b>${esc(task.title)}</b><span>${esc(task.hint)}</span></span>${badge(task.status, `${task.count} ${task.count === 1 ? 'задача' : 'задач'}`)}</button>`).join('')}</div>` : `<div class="empty-action"><div><b>Очередь спокойна</b><br><span>Нет боксов, обращений или доставок, требующих действий.</span></div></div>`}
+          </section>
+          <section class="card">
+            <div class="card-head"><div><h2>Контроль смены</h2><p class="muted">Карта курьеров остаётся главным инструментом диспетчера.</p></div><button class="btn secondary" onclick="setView('dispatch')">Открыть карту</button></div>
+            <dl class="summary-list">
+              <div><dt>Курьеры на маршрутах</dt><dd>${esc(dashboard.outForDeliveryOrders ?? 0)} боксов в пути</dd></div>
+              <div><dt>Остатки под контролем</dt><dd>${lowStock.length ? `${lowStock.length} позиций требуют проверки` : 'Критичных остатков нет'}</dd></div>
+              <div><dt>Активные планы</dt><dd>${esc(dashboard.activeSubscriptions ?? 0)}</dd></div>
+              <div><dt>Выручка сегодня</dt><dd>${money(dashboard.revenueToday, 'AMD')}</dd></div>
+            </dl>
+          </section>
+        </div>`;
+    }
+    async function orders() {
+      const result = await api('/v1/admin/orders');
+      const all = result.items || [];
+      state.cache.orders = all;
+      renderOrders();
+    }
+    function renderOrders() {
+      const all = state.cache.orders || [];
+      const query = plain(state.filters.orderSearch);
+      const status = state.filters.orderStatus || '';
+      const action = state.filters.orderAction || '';
+      const sort = state.filters.orderSort || '';
+      const statuses = [...new Set(all.map(x => x.status).filter(Boolean))];
+      let rows = all.filter(order => (!status || order.status === status) && (!query || plain([order.code, order.customer?.name, order.customer?.email, order.delivery?.formattedAddress].join(' ')).includes(query)) && (!action || (action === 'needs_action' ? orderNeedsAction(order) : true)));
+      rows = rows.sort((a, b) => {
+        if (sort === 'oldest') return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        if (sort === 'amount_desc') return Number(b.totalMinor || b.total || 0) - Number(a.totalMinor || a.total || 0);
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      });
+      const selectedRows = rows.filter(x => state.selectedOrders.has(String(x.id)));
+      $('content').innerHTML = `
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input id="orderSearch" class="search" placeholder="Бокс, клиентка, адрес" value="${esc(state.filters.orderSearch || '')}" />
+            <select id="orderStatus" class="select"><option value="">Все статусы</option>${statuses.map(s => `<option value="${esc(s)}" ${s === status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
+            <select id="orderAction" class="select"><option value="">Все задачи</option><option value="needs_action" ${action === 'needs_action' ? 'selected' : ''}>Требуют действия</option></select>
+            <select id="orderSort" class="select"><option value="" ${!sort ? 'selected' : ''}>Сначала новые</option><option value="oldest" ${sort === 'oldest' ? 'selected' : ''}>Сначала старые</option><option value="amount_desc" ${sort === 'amount_desc' ? 'selected' : ''}>По сумме</option></select>
+          </div>
+          <div class="toolbar-right"><span class="muted">${rows.length} из ${all.length}</span></div>
+        </div>
+        ${appliedChips([
+          { label: 'Поиск', value: state.filters.orderSearch, clear: "state.filters.orderSearch='';renderOrders()", clearAll: "clearFilters('orders')" },
+          { label: 'Статус', value: status, clear: "state.filters.orderStatus='';renderOrders()" },
+          { label: 'Задача', value: action, text: action === 'needs_action' ? 'Требуют действия' : action, clear: "state.filters.orderAction='';renderOrders()" },
+          { label: 'Сортировка', value: sort, text: sort === 'oldest' ? 'Сначала старые' : sort === 'amount_desc' ? 'По сумме' : '', clear: "state.filters.orderSort='';renderOrders()" }
+        ])}
+        ${rows.some(x => !careDueValue(x)) ? '<div class="notice info" style="margin-bottom:12px"><b>Нужно назначить даты доставки.</b> Для части боксов пока нет операционного дедлайна, поэтому команда не может понять, успеваем ли доставить за день до цикла.</div>' : ''}
+        ${selectedRows.length ? `<div class="batch-bar"><b>Выбрано боксов: ${selectedRows.length}</b><div class="toolbar-right"><button class="btn secondary" onclick="openFirstSelectedOrder()">Открыть первый</button><button class="btn" onclick="bulkChangeOrderStatus('PACKING')">Передать в сборку</button><button class="btn" onclick="bulkChangeOrderStatus('READY_FOR_COURIER')">Готово курьеру</button><button class="btn secondary" onclick="clearSelectedOrders()">Снять выбор</button></div></div>` : ''}
+        <section class="card orders-table">${table(rows, [
+          { label: '', render: x => `<input type="checkbox" ${state.selectedOrders.has(String(x.id)) ? 'checked' : ''} onchange="toggleOrderSelection('${attr(x.id)}', this.checked)" aria-label="Выбрать бокс ${esc(orderTitle(x))}" />` },
+          { label: 'Бокс', render: x => `<button class="btn ghost" onclick="openOrder('${attr(x.id)}')">${esc(orderTitle(x))}</button><br><span class="muted">${careDueValue(x) ? esc(careWindow(x)) : 'Дата доставки не выбрана'}</span>` },
+          { label: 'Клиентка', render: x => `${esc(x.customer?.name || x.customerName || '—')}<br><span class="muted">${esc(x.customer?.email || '')}</span>` },
+          { label: 'Сумма', render: x => `<span class="money">${money(x.totalMinor ?? x.total, x.currency)}</span>` },
+          { label: 'Оплата', render: x => badge(x.paymentStatus) },
+          { label: 'Окно заботы', render: x => careCell(x) },
+          { label: 'Статус', render: x => badge(x.status) }
+        ], 'Боксов по фильтру нет')}</section>
+        <section class="mobile-list">${rows.map(orderMobileCard).join('') || empty('Боксов по фильтру нет', 'Снимите фильтры или обновите данные.')}</section>`;
+      $('orderSearch').oninput = event => { state.filters.orderSearch = event.target.value; renderOrders(); };
+      $('orderStatus').onchange = event => { state.filters.orderStatus = event.target.value; renderOrders(); };
+      $('orderAction').onchange = event => { state.filters.orderAction = event.target.value; renderOrders(); };
+      $('orderSort').onchange = event => { state.filters.orderSort = event.target.value; renderOrders(); };
+    }
+    function orderMobileCard(order) {
+      const id = String(order.id);
+      const checked = state.selectedOrders.has(id) ? 'checked' : '';
+      const customer = order.customer?.name || order.customerName || 'Клиент не указан';
+      const address = order.delivery?.formattedAddress || order.formattedAddress || order.address || 'Адрес не указан';
+      return `<article class="order-card">
+        <header>
+          <div>
+            <span class="muted">Бокс заботы</span>
+            <h3>${esc(orderTitle(order))}</h3>
+          </div>
+          <input type="checkbox" ${checked} onchange="toggleOrderSelection('${attr(order.id)}', this.checked)" aria-label="Выбрать бокс ${esc(orderTitle(order))}" />
+        </header>
+        <div class="order-facts">
+          <div class="fact"><span>Клиентка</span><b>${esc(customer)}</b></div>
+          <div class="fact"><span>Сумма</span><b>${money(order.totalMinor ?? order.total, order.currency)}</b></div>
+          <div class="fact"><span>Статус заказа</span><b>${badge(order.status)}</b></div>
+          <div class="fact"><span>Оплата</span><b>${badge(order.paymentStatus)}</b></div>
+          <div class="fact"><span>Окно заботы</span><b>${careDueValue(order) ? esc(careWindow(order)) : 'Дата доставки не выбрана'}</b></div>
+          <div class="fact"><span>Что сделать</span><b>${esc(careRisk(order)[1])}</b></div>
+          <div class="fact"><span>Создан</span><b>${stamp(order.createdAt)}</b></div>
+        </div>
+        <p class="muted">${esc(address)}</p>
+        <footer><button class="btn secondary" onclick="openOrder('${attr(order.id)}')">Открыть бокс</button></footer>
+      </article>`;
+    }
+    function toggleOrderSelection(id, checked) {
+      if (checked) state.selectedOrders.add(String(id));
+      else state.selectedOrders.delete(String(id));
+      renderOrders();
+    }
+    function clearSelectedOrders() {
+      state.selectedOrders.clear();
+      renderOrders();
+    }
+    function openFirstSelectedOrder() {
+      const first = [...state.selectedOrders][0];
+      if (first) openOrder(first);
+    }
+    function bulkChangeOrderStatus(status) {
+      const ids = [...state.selectedOrders];
+      if (!ids.length) return toast('Выберите заказы.', 'error');
+      modal(`Массово изменить статус на ${status}`, `<div class="notice info">Действие выполнится по каждому выбранному заказу через основной API и попадёт в аудит.</div><label class="form-field">Причина<textarea id="bulkReason" placeholder="Например: передано старшему смены"></textarea></label>`, async root => {
+        const reason = root.querySelector('#bulkReason').value.trim();
+        if (!reason) throw new Error('Укажите причину.');
+        if (!confirm(`Изменить ${ids.length} заказов?`)) return false;
+        await Promise.all(ids.map(id => api(`/v1/admin/orders/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status, reason }) })));
+        state.selectedOrders.clear();
+        toast('Боксы обновлены.');
+        await orders();
+      }, 'Изменить');
+    }
+    async function openOrder(id) {
+      const order = await api(`/v1/admin/orders/${encodeURIComponent(id)}`);
+      const statuses = ['PENDING_PAYMENT','PAID','PACKING','READY_FOR_COURIER','COURIER_ASSIGNED','OUT_FOR_DELIVERY','DELIVERED','ISSUE','CANCELLED'];
+      const risk = careRisk(order);
+      const address = order.delivery?.formattedAddress || order.formattedAddress || order.address || 'Адрес не указан';
+      const coords = coordsFrom(order);
+      drawer(`Бокс заботы ${order.code || order.id}`, `
+        <div class="notice info"><b>Задача:</b> доставить бокс за день до начала цикла. ${careDueValue(order) ? `Операционный дедлайн: ${esc(careWindow(order))}.` : 'Сначала назначьте дату доставки.'}</div>
+        <div class="notice">${badge(order.status)} ${badge(order.paymentStatus)} ${badge(order.deliveryStatus || 'нет доставки')} <span class="badge ${risk[0]}">${esc(risk[1])}</span></div>
+        <div class="detail-row"><span>Клиентка</span><b>${esc(order.customer?.name || '—')}<br><span class="muted">${esc(order.customer?.email || '')} ${esc(order.customer?.phone || '')}</span></b></div>
+        <div class="detail-row"><span>Когда хочет получить</span><b>${esc(careWindow(order))}</b></div>
+        <div class="detail-row"><span>Адрес отдельно</span><b>${esc(address)}</b></div>
+        <div class="detail-row"><span>Окно заботы</span><b>${esc(careWindow(order))}</b></div>
+        ${mapHtml([{ coords, label: address, short: 'Б' }], 'Точка доставки бокса', true)}
+        <div class="toolbar">${mapLink(coords, 'Открыть точку на карте')}</div>
+        <div class="detail-row"><span>Сумма</span><b>${money(order.totalMinor ?? order.total, order.currency)}</b></div>
+        <div class="detail-row"><span>Создан</span><b>${stamp(order.createdAt)}</b></div>
+        <div class="toolbar"><button class="btn" onclick="changeOrderStatus('${attr(order.id)}','${attr(order.status)}')">Изменить статус</button><button class="btn secondary" onclick="scheduleCareWindow('${attr(order.id)}')">Выбрать дату доставки</button><button class="btn secondary" onclick="addOrderNote('${attr(order.id)}')">Внутренняя заметка</button></div>
+      `);
+      initOperationalMaps();
+    }
+    function scheduleCareWindow(id) {
+      modal('Выбрать дату доставки', `<div class="notice info">Дата нужна, чтобы команда успела доставить бокс за день до начала цикла.</div><label class="form-field">Доставить до<input id="careDueAt" type="datetime-local" /></label><label class="form-field">Причина<input id="careDueReason" placeholder="Например: назначено оператором" /></label>`, async root => {
+        const careDueAt = root.querySelector('#careDueAt').value;
+        const reason = root.querySelector('#careDueReason').value.trim();
+        if (!careDueAt) throw new Error('Выберите дату и время доставки.');
+        if (!reason) throw new Error('Укажите причину для журнала.');
+        await api(`/v1/admin/orders/${encodeURIComponent(id)}/care-window`, { method: 'PATCH', body: JSON.stringify({ careDueAt, reason }) });
+        toast('Дата доставки назначена.');
+        closeDrawer();
+        await orders();
+      }, 'Назначить дату');
+    }
+    function changeOrderStatus(id, current) {
+      const statuses = ['PENDING_PAYMENT','PAID','PACKING','READY_FOR_COURIER','COURIER_ASSIGNED','OUT_FOR_DELIVERY','DELIVERED','ISSUE','CANCELLED'];
+      modal('Изменить статус бокса', `<label class="form-field">Новый статус<select id="nextStatus">${statuses.map(s => `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('')}</select></label><label class="form-field">Причина<input id="reason" placeholder="Например: бокс собран, передан курьеру" /></label>`, async root => {
+        const status = root.querySelector('#nextStatus').value;
+        const reason = root.querySelector('#reason').value.trim();
+        if (!reason) throw new Error('Укажите причину изменения.');
+        await api(`/v1/admin/orders/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status, reason }) });
+        toast('Статус бокса обновлён.');
+        closeDrawer();
+        await orders();
+      });
+    }
+    function addOrderNote(id) {
+      modal('Внутренняя заметка', `<label class="form-field">Заметка<textarea id="note"></textarea></label>`, async root => {
+        const note = root.querySelector('#note').value.trim();
+        if (!note) throw new Error('Введите текст заметки.');
+        await api(`/v1/admin/orders/${encodeURIComponent(id)}/internal-notes`, { method: 'POST', body: JSON.stringify({ note }) });
+        toast('Заметка добавлена.');
+      }, 'Добавить');
+    }
+    async function packing() {
+      const result = await api('/v1/admin/packing');
+      const rows = result.items || [];
+      $('content').innerHTML = `<section class="card"><div class="notice info" style="margin-bottom:12px"><b>Смысл сборки:</b> бокс должен быть готов заранее, чтобы курьер успел доставить его до окна заботы.</div><div class="card-head"><h2>Очередь сборки боксов</h2><span class="muted">${rows.length} боксов</span></div><div class="stack">${rows.map(row => workCard(row.code || row.id, row.status, [esc(row.plan || 'План заботы не указан'), esc(careWindow(row)), esc((row.items || []).map(i => `${i.name || i.sku} x${i.quantity}`).join(', ') || 'Состав не указан')], `<button class="btn" onclick="completePacking('${attr(row.id)}')">Бокс готов курьеру</button>`)).join('') || empty('Очередь пуста', 'Нет боксов, которые нужно собрать прямо сейчас.')}</div></section>`;
+    }
+    async function completePacking(id) {
+      if (!confirm('Подтвердить, что бокс собран и готов к доставке?')) return;
+      await api(`/v1/admin/packing/${encodeURIComponent(id)}/complete`, { method: 'PATCH', body: '{}' });
+      toast('Бокс готов к передаче курьеру.');
+      await packing();
+    }
+    function deliverySignal(task) {
+      const freshness = String(task.gpsStatus || task.locationStatus || task.courier?.locationStatus || '').toUpperCase();
+      if (/STALE|OFFLINE|UNAVAILABLE/.test(freshness)) return ['bad', 'GPS устарел'];
+      if (/LOW|WEAK/.test(freshness)) return ['warn', 'GPS неточный'];
+      if (/LIVE|FRESH|ONLINE|ACCURATE/.test(freshness)) return ['good', 'GPS актуален'];
+      return ['info', 'GPS не передан'];
+    }
+    function courierCard(courier) {
+      const shift = shiftInfo(courier);
+      const coords = coordsFrom(courier);
+      const phone = courier.phone || courier.mobile || '';
+      const email = courier.email || courier.login || '';
+      const status = shift.open ? 'ON_SHIFT' : 'OFF_SHIFT';
+      const lines = [
+        phone ? `Телефон: ${esc(phone)}` : 'Телефон не указан',
+        email ? `Логин: ${esc(email)}` : 'Логин не указан',
+        shift.open ? `Смена открыта: ${stamp(shift.openedAt)}` : `Смена закрыта: ${stamp(shift.closedAt)}`,
+        coords ? `GPS: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'GPS не передан',
+        `Активных задач: ${esc(courier.assignmentsCount ?? courier.activeDeliveries ?? 0)}`
+      ];
+      return `<article class="courier-card">
+        <header><div><h3>${esc(courier.name || courier.id)}</h3><p class="muted">${lines.join('<br>')}</p></div>${badge(status)}</header>
+        <div class="courier-actions">
+          ${phone ? `<a class="btn secondary" href="tel:${attr(phone)}">Позвонить</a>` : '<button class="btn secondary" disabled>Нет телефона</button>'}
+          <button class="btn secondary" onclick="messageCourier('${attr(courier.id)}')">Сообщение</button>
+          ${mapLink(coords, 'Карта') || '<button class="btn secondary" disabled>Нет GPS</button>'}
+          <button class="btn secondary" onclick="toggleCourier('${attr(courier.id)}', ${courier.isActive === false})">${courier.isActive === false ? 'Включить' : 'Отключить'}</button>
+        </div>
+      </article>`;
+    }
+    async function dispatch() {
+      const [taskResult, courierResult] = await Promise.all([api('/v1/admin/deliveries'), api('/v1/admin/couriers')]);
+      const tasks = taskResult.items || [];
+      const couriers = courierResult.items || [];
+      state.cache.deliveryTasks = tasks;
+      state.cache.couriers = couriers;
+      const openShiftCouriers = couriers.filter(c => shiftInfo(c).open);
+      const openCourierIds = new Set(openShiftCouriers.map(c => String(c.id)));
+      const taskCourierId = task => String(task.courierId || task.assignedCourier?.id || task.assignedCourierId || '');
+      const routeActive = task => /PICKED_UP|OUT_FOR_DELIVERY|ARRIVED/.test(String(task.status || '').toUpperCase());
+      const activeRouteTasks = tasks.filter(task => openCourierIds.has(taskCourierId(task)) && deliveryCoordsFrom(task));
+      const courierMarkers = openShiftCouriers.map(c => ({ coords: coordsFrom(c), heading: headingFrom(c), label: `${c.name || c.id} · смена открыта`, short: 'К', type: 'courier', kind: deliverySignal(c)[0] === 'bad' ? 'problem courier' : 'courier' }));
+      const deliveryMarkers = activeRouteTasks.map(task => ({ coords: deliveryCoordsFrom(task), label: `${task.orderCode || task.id} · ${task.formattedAddress || 'адрес бокса'}`, short: 'Б', kind: careRisk(task)[0] === 'bad' ? 'problem' : '' }));
+      const courierRoutes = openShiftCouriers.map(courier => {
+        const start = coordsFrom(courier);
+        const stops = tasks.filter(task => taskCourierId(task) === String(courier.id) && routeActive(task)).map(deliveryCoordsFrom).filter(Boolean);
+        return { label: `Реальный маршрут ${courier.name || courier.id}`, kind: 'waiting-routing', coords: [start, ...stops].filter(Boolean), requireRouting: true };
+      }).filter(route => route.coords.length > 1);
+      const mapEmpty = courierMapEmpty(couriers, openShiftCouriers);
+      const query = plain(state.filters.dispatchSearch);
+      const status = state.filters.dispatchStatus || '';
+      const priority = state.filters.dispatchPriority || '';
+      const statuses = [...new Set(tasks.map(x => x.status).filter(Boolean))];
+      const rows = tasks.filter(task => (!status || task.status === status) && (!query || plain([task.orderCode, task.recipientName, task.phone, task.formattedAddress, task.courier?.name].join(' ')).includes(query)) && (!priority || (priority === 'problem' ? tone(task.status) === 'bad' || deliverySignal(task)[0] === 'bad' : !task.courier && !task.courierId)));
+      $('content').innerHTML = `
+        <div class="toolbar">
+          <div class="toolbar-left"><input id="dispatchSearch" class="search" placeholder="Бокс, клиентка, адрес" value="${esc(state.filters.dispatchSearch || '')}" /><select id="dispatchStatus" class="select"><option value="">Все статусы</option>${statuses.map(s => `<option value="${esc(s)}" ${s === status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select><select id="dispatchPriority" class="select"><option value="">Все задачи</option><option value="unassigned" ${priority === 'unassigned' ? 'selected' : ''}>Без курьера</option><option value="problem" ${priority === 'problem' ? 'selected' : ''}>Риск опоздания</option></select></div>
+          <div class="toolbar-right"><button class="btn secondary" onclick="newCourier()">Создать аккаунт курьера</button></div>
+        </div>
+        ${appliedChips([
+          { label: 'Поиск', value: state.filters.dispatchSearch, clear: "state.filters.dispatchSearch='';dispatch()", clearAll: "clearFilters('dispatch')" },
+          { label: 'Статус', value: status, clear: "state.filters.dispatchStatus='';dispatch()" },
+          { label: 'Задача', value: priority, text: priority === 'problem' ? 'Проблемные' : priority === 'unassigned' ? 'Без курьера' : priority, clear: "state.filters.dispatchPriority='';dispatch()" }
+        ])}
+        <section class="card" style="margin-bottom:14px">
+          <div class="card-head"><h2>Курьеры на открытой смене</h2><span class="muted">${openShiftCouriers.length} онлайн</span></div>
+          ${mapHtml([...courierMarkers, ...deliveryMarkers], mapEmpty.title, false, mapEmpty.body, mapEmpty.actions, { routes: courierRoutes })}
+          <div class="notice" style="margin-top:10px">Карта использует только LOUSA map endpoint. Мопед взят из APK. “Б” — назначенный бокс. Маршрут появляется только после того, как курьер взял заказ, и только если LOUSA routing вернул реальную геометрию.</div>
+          <div class="data-contract">
+            <div class="contract-item"><b>1. Аккаунт</b>Админ создаёт курьера: name, phone, email/login, temporaryPassword.</div>
+            <div class="contract-item"><b>2. Смена</b>Courier app отправляет isOnShift/shiftStatus и shiftOpenedAt/shiftClosedAt.</div>
+            <div class="contract-item"><b>3. GPS</b>Во время смены API отдаёт lastLocation/currentLocation: latitude + longitude.</div>
+          </div>
+        </section>
+        <div class="layout">
+          <section class="card"><div class="notice info" style="margin-bottom:12px"><b>Диспетчерская цель:</b> назначить курьера так, чтобы бокс приехал до окна заботы. Если окно не пришло из API, задача помечается как требующая уточнения.</div><div class="card-head"><h2>Доставка боксов</h2><span class="muted">${rows.length}</span></div><div class="stack">${rows.map(task => {
+            const signal = deliverySignal(task);
+            const risk = careRisk(task);
+            return workCard(task.orderCode || task.id, task.status, [`${esc(task.recipientName || 'Клиентка')} · ${esc(task.phone || '—')}`, esc(careWindow(task)), esc(task.formattedAddress || 'Адрес не указан'), `<span class="badge ${signal[0]}">${signal[1]}</span> <span class="badge ${risk[0]}">${esc(risk[1])}</span>`], `<button class="btn secondary" onclick="openDelivery('${attr(task.id)}')">Детали</button><select class="select" id="courier-${attr(task.id)}"><option value="">Курьер</option>${couriers.filter(c => c.isActive !== false).map(c => `<option value="${attr(c.id)}">${esc(c.name || c.id)}</option>`).join('')}</select><button class="btn" onclick="assignCourier('${attr(task.id)}')">Назначить</button>`);
+          }).join('') || empty('Нет задач доставки')}</div></section>
+          <aside class="card"><div class="card-head"><h2>Курьеры и смены</h2><span class="muted">${couriers.length}</span></div><div class="stack">${couriers.map(courierCard).join('') || empty('Курьеров нет', 'Создайте аккаунт курьера и выдайте доступ к courier app.')}</div></aside>
+        </div>`;
+      initOperationalMaps();
+      $('dispatchSearch').oninput = event => { state.filters.dispatchSearch = event.target.value; dispatch(); };
+      $('dispatchStatus').onchange = event => { state.filters.dispatchStatus = event.target.value; dispatch(); };
+      $('dispatchPriority').onchange = event => { state.filters.dispatchPriority = event.target.value; dispatch(); };
+      ensureDispatchLive();
+    }
+    function openDelivery(id) {
+      const task = (state.cache.deliveryTasks || []).find(x => String(x.id) === String(id));
+      if (!task) return toast('Задача не найдена.', 'error');
+      const signal = deliverySignal(task);
+      const risk = careRisk(task);
+      const address = task.formattedAddress || task.delivery?.formattedAddress || task.address?.formatted || task.address || 'Адрес не указан';
+      const deliveryCoords = deliveryCoordsFrom(task);
+      const courierCoords = courierCoordsFrom(task);
+      const markers = [
+        { coords: deliveryCoords, label: address, short: 'Б' },
+        { coords: courierCoords, label: `Курьер: ${task.courier?.name || task.courierName || 'не назначен'}`, short: 'К', type: 'courier', kind: 'courier' }
+      ];
+      const routeIsActive = /PICKED_UP|OUT_FOR_DELIVERY|ARRIVED/.test(String(task.status || '').toUpperCase());
+      const route = routeIsActive && courierCoords && deliveryCoords ? [{ label: `Реальный маршрут к ${task.orderCode || task.id}`, kind: 'waiting-routing', requireRouting: true, coords: [courierCoords, deliveryCoords] }] : [];
+      drawer(`Доставка бокса ${task.orderCode || task.id}`, `
+        <div class="notice info"><b>Задача курьера:</b> доставить бокс заботы до операционного дедлайна: ${esc(careWindow(task))}.</div>
+        <div class="notice">${badge(task.status)} <span class="badge ${signal[0]}">${signal[1]}</span> <span class="badge ${risk[0]}">${esc(risk[1])}</span></div>
+        <div class="detail-row"><span>Клиентка</span><b>${esc(task.recipientName || '—')}<br><span class="muted">${esc(task.phone || '')}</span></b></div>
+        <div class="detail-row"><span>Адрес отдельно</span><b>${esc(address)}</b></div>
+        <div class="detail-row"><span>Когда хочет получить</span><b>${esc(careWindow(task))}</b></div>
+        <div class="detail-row"><span>Курьер</span><b>${esc(task.courier?.name || task.courierName || 'Не назначен')}</b></div>
+        <div class="detail-row"><span>Окно заботы</span><b>${esc(careWindow(task))}</b></div>
+        <div class="detail-row"><span>Последний GPS</span><b>${stamp(task.lastLocationAt || task.courier?.lastLocationAt)}</b></div>
+        ${mapHtml(markers, 'Адрес бокса и курьер', true, undefined, undefined, { routes: route })}
+        ${routeIsActive ? '<div class="notice" style="margin-top:10px">Маршрут появится только когда LOUSA routing вернёт реальную линию дороги. Пока показываем точки без поддельной линии.</div>' : '<div class="notice" style="margin-top:10px">Маршрут появится после того, как курьер возьмёт бокс в доставку.</div>'}
+        <div class="toolbar">${mapLink(deliveryCoords, 'Открыть адрес')}${mapLink(courierCoords, 'Открыть курьера')}</div>
+        <div class="toolbar"><button class="btn secondary" onclick="editDeliveryStatus('${attr(task.id)}','${attr(task.status)}')">Изменить статус</button></div>
+      `);
+      initOperationalMaps();
+    }
+    async function assignCourier(id) {
+      const courierId = $(`courier-${id}`)?.value;
+      if (!courierId) return toast('Выберите курьера.', 'error');
+      if (!confirm('Назначить курьера на доставку бокса заботы? Действие попадёт в журнал.')) return;
+      await api(`/v1/admin/deliveries/${encodeURIComponent(id)}/assign-courier`, { method: 'PATCH', body: JSON.stringify({ courierId }) });
+      toast('Курьер назначен на бокс.');
+      await dispatch();
+    }
+    function editDeliveryStatus(id, current) {
+      const statuses = ['PICKED_UP','OUT_FOR_DELIVERY','DELIVERED','DELIVERY_ISSUE'];
+      modal('Статус доставки', `<label class="form-field">Статус<select id="deliveryStatus">${statuses.map(s => `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('')}</select></label><label class="form-field">Комментарий<input id="deliveryReason" /></label>`, async root => {
+        const status = root.querySelector('#deliveryStatus').value;
+        const reason = root.querySelector('#deliveryReason').value.trim();
+        if (status === 'DELIVERY_ISSUE' && !reason) throw new Error('Для проблемы доставки нужен комментарий.');
+        await api(`/v1/admin/deliveries/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status, reason }) });
+        toast('Статус обновлён.');
+        closeDrawer();
+        await dispatch();
+      });
+    }
+    function newCourier() {
+      modal('Создать аккаунт курьера', `<div class="notice info">Оператор создаёт доступ для courier app. Курьер открывает смену в своём приложении, а панель показывает его GPS только во время открытой смены.</div><div class="split"><label class="form-field">Имя<input id="courierName" /></label><label class="form-field">Телефон<input id="courierPhone" /></label><label class="form-field">Email / логин<input id="courierEmail" type="email" /></label><label class="form-field">Временный пароль<input id="courierPassword" type="password" autocomplete="new-password" /></label><label class="form-field full">Тип транспорта<select id="courierVehicle"><option value="car">Авто</option><option value="bike">Велосипед</option><option value="scooter">Скутер</option><option value="walk">Пеший</option></select></label></div>`, async root => {
+        const name = root.querySelector('#courierName').value.trim();
+        const phone = root.querySelector('#courierPhone').value.trim();
+        const email = root.querySelector('#courierEmail').value.trim();
+        const temporaryPassword = root.querySelector('#courierPassword').value;
+        if (!name) throw new Error('Укажите имя.');
+        if (!phone) throw new Error('Укажите телефон для звонков.');
+        if (!email) throw new Error('Укажите email или логин.');
+        if (!temporaryPassword || temporaryPassword.length < 6) throw new Error('Временный пароль должен быть не короче 6 символов.');
+        await api('/v1/admin/couriers', { method: 'POST', body: JSON.stringify({ name, phone, email, temporaryPassword, role: 'courier', vehicleType: root.querySelector('#courierVehicle').value }) });
+        toast('Аккаунт курьера создан.');
+        await dispatch();
+      }, 'Создать аккаунт');
+    }
+    function messageCourier(id) {
+      const courier = (state.cache.couriers || []).find(x => String(x.id) === String(id));
+      modal(`Сообщение курьеру ${courier?.name || id}`, `<div class="notice info">Сообщение уйдёт в courier app. Для срочного случая используйте звонок из карточки курьера.</div><label class="form-field">Текст сообщения<textarea id="courierMessage" placeholder="Например: забери бокс LM-... и доставь до 18:00"></textarea></label>`, async root => {
+        const message = root.querySelector('#courierMessage').value.trim();
+        if (!message) throw new Error('Введите сообщение.');
+        await api(`/v1/admin/couriers/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ message }) });
+        toast('Сообщение отправлено курьеру.');
+      }, 'Отправить');
+    }
+    async function toggleCourier(id, isActive) {
+      await api(`/v1/admin/couriers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+      toast(isActive ? 'Курьер включён.' : 'Курьер отключён.');
+      await dispatch();
+    }
+    async function customers() {
+      const result = await api('/v1/admin/customers');
+      const all = result.items || [];
+      state.cache.customers = all;
+      renderCustomers();
+    }
+    function renderCustomers() {
+      const query = plain(state.filters.customerSearch);
+      const rows = (state.cache.customers || []).filter(x => !query || plain([x.name, x.email, x.phone].join(' ')).includes(query));
+      $('content').innerHTML = `<div class="toolbar"><div class="toolbar-left"><input id="customerSearch" class="search" placeholder="Имя, email или телефон" value="${esc(state.filters.customerSearch || '')}" /></div><div class="toolbar-right"><span class="muted">${rows.length} клиенток</span></div></div><section class="card">${table(rows, [
+        { label: 'Клиентка', render: x => `<b>${esc(x.name || '—')}</b><br><span class="muted">${esc(x.email || '—')}</span>` },
+        { label: 'Контакт', render: x => esc(x.phone || 'Не указан') },
+        { label: 'Заказы', render: x => esc(x.ordersCount ?? 0) },
+        { label: 'План', render: x => x.activeSubscription ? badge(x.activeSubscription.status, x.activeSubscription.nextDeliveryDate ? `До ${stamp(x.activeSubscription.nextDeliveryDate)}` : 'Активен') : '<span class="muted">Нет</span>' },
+        { label: 'Статус', render: x => badge(x.status) },
+        { label: '', render: x => `<button class="btn secondary" onclick="openCustomer('${attr(x.id)}')">Карточка</button>` }
+      ], 'Клиенток пока нет', 'Здесь появятся только реальные регистрации из приложения.')}</section>`;
+      $('customerSearch').oninput = event => { state.filters.customerSearch = event.target.value; renderCustomers(); };
+    }
+    async function openCustomer(id) {
+      const result = await api(`/v1/admin/users/${encodeURIComponent(id)}`);
+      const customer = result.user || {};
+      const addresses = result.addresses || [];
+      const orders = result.orders || [];
+      const subscriptions = result.subscriptions || [];
+      const supportItems = result.support || [];
+      drawer(customer.name || 'Карточка клиентки', `
+        <div class="card" style="margin-bottom:12px"><div class="card-head"><div><h2>Аккаунт</h2><p class="muted">Операционная информация без чувствительных данных о цикле.</p></div><button class="btn secondary" onclick="editCustomer('${attr(customer.id)}')">Изменить</button></div><dl class="summary-list"><div><dt>Email</dt><dd>${esc(customer.email || '—')}</dd></div><div><dt>Телефон</dt><dd>${esc(customer.phone || 'Не указан')}</dd></div><div><dt>Статус</dt><dd>${badge(customer.status)}</dd></div><div><dt>Создан</dt><dd>${stamp(customer.createdAt)}</dd></div></dl></div>
+        <div class="card" style="margin-bottom:12px"><div class="card-head"><h2>Адреса доставки</h2><span class="muted">${addresses.length}</span></div><div class="stack">${addresses.map(address => `<div class="work-card"><b>${esc(address.formattedAddress || 'Адрес не указан')}</b><p>${esc(address.recipientName || '')}${address.phone ? ` · ${esc(address.phone)}` : ''}</p></div>`).join('') || empty('Адресов нет')}</div></div>
+        <div class="card" style="margin-bottom:12px"><div class="card-head"><h2>Планы заботы</h2><span class="muted">${subscriptions.length}</span></div><div class="stack">${subscriptions.map(item => workCard(item.plan || 'План', item.status, [`Следующий бокс: ${stamp(item.nextBoxDate)}`, `Списание: ${stamp(item.nextBillingDate)}`], `<button class="btn secondary" onclick="editSubscription('${attr(item.id)}','${attr(item.status)}')">Изменить</button>`)).join('') || empty('Активных планов нет')}</div></div>
+        <div class="card" style="margin-bottom:12px"><div class="card-head"><h2>Заказы</h2><span class="muted">${orders.length}</span></div><div class="stack">${orders.map(order => workCard(order.code || order.id, order.status, orderLines(order), `<button class="btn secondary" onclick="openOrder('${attr(order.id)}')">Открыть заказ</button>`)).join('') || empty('Заказов нет')}</div></div>
+        <div class="card"><div class="card-head"><h2>Поддержка</h2><span class="muted">${supportItems.length}</span></div><div class="stack">${supportItems.map(item => workCard(item.subject || 'Обращение', item.status, [`${esc(item.category)} · ${esc(item.priority)}`, stamp(item.updatedAt)])).join('') || empty('Обращений нет')}</div></div>`);
+    }
+    async function editCustomer(id) {
+      const result = await api(`/v1/admin/users/${encodeURIComponent(id)}`);
+      const customer = result.user || {};
+      modal('Изменить клиентку', `<div class="split"><label class="form-field">Имя<input id="customerName" value="${attr(customer.name || '')}" /></label><label class="form-field">Телефон<input id="customerPhone" value="${attr(customer.phone || '')}" /></label><label class="form-field">Статус<select id="customerStatus">${['active','paused','blocked'].map(status => `<option value="${status}" ${status === customer.status ? 'selected' : ''}>${status}</option>`).join('')}</select></label><label class="form-field">Язык<select id="customerLanguage"><option value="ru">Русский</option><option value="hy">Հայերեն</option><option value="en">English</option></select></label></div>`, async root => {
+        await api(`/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name: root.querySelector('#customerName').value.trim(), phone: root.querySelector('#customerPhone').value.trim(), status: root.querySelector('#customerStatus').value, language: root.querySelector('#customerLanguage').value }) });
+        toast('Карточка клиентки обновлена.');
+        closeDrawer();
+        await customers();
+      });
+    }
+    async function subscriptions() {
+      const result = await api('/v1/admin/subscriptions');
+      const rows = result.items || [];
+      $('content').innerHTML = `<div class="toolbar"><button class="btn" onclick="createTrial()">Оформить пробный план заботы</button></div><section class="card"><div class="notice info" style="margin-bottom:12px"><b>План заботы:</b> регулярный бокс должен приезжать заранее. Здесь не нужны подробности цикла, только операционная дата следующей доставки.</div><div class="stack">${rows.map(x => workCard(x.user?.name || x.userName || x.id, x.status, [`Следующий бокс: ${stamp(x.nextDeliveryDate)}`, `Окно заботы: ${esc(careWindow(x))}`, `Списание: ${stamp(x.nextBillingDate)}`], `<button class="btn secondary" onclick="editSubscription('${attr(x.id)}','${attr(x.status)}')">Изменить</button>`)).join('') || empty('Планов заботы нет')}</div></section>`;
+    }
+    function editSubscription(id, current) {
+      modal('Изменить подписку', `<label class="form-field">Статус<select id="subStatus">${['active','paused','cancelled'].map(s => `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('')}</select></label><label class="form-field">Причина<input id="subReason" /></label>`, async root => {
+        await api(`/v1/admin/subscriptions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status: root.querySelector('#subStatus').value, reason: root.querySelector('#subReason').value || 'Из админ-панели' }) });
+        toast('Подписка обновлена.');
+        await subscriptions();
+      });
+    }
+    function createTrial() {
+      modal('Пробный план заботы', `<div class="notice">Создаётся реальный пробный план для существующей клиентки. Следующий бокс должен попасть в окно заботы.</div><div class="split"><label class="form-field">ID клиентки<input id="trialCustomer" /></label><label class="form-field">Код плана<input id="trialPlan" /></label><label class="form-field full">Причина<input id="trialReason" /></label></div>`, async root => {
+        const customerId = root.querySelector('#trialCustomer').value.trim();
+        const planCode = root.querySelector('#trialPlan').value.trim();
+        const reason = root.querySelector('#trialReason').value.trim();
+        if (!customerId || !planCode || !reason) throw new Error('Заполните клиента, тариф и причину.');
+        await api('/v1/admin/subscriptions/trials', { method: 'POST', body: JSON.stringify({ customerId, planCode, reason }) });
+        toast('Пробный план заботы создан.');
+        await subscriptions();
+      }, 'Создать');
+    }
+    async function catalog() {
+      const [products, plans, inventory] = await Promise.all([api('/v1/admin/catalog/products'), api('/v1/admin/catalog/plans'), api('/v1/admin/inventory')]);
+      const productRows = products.items || [];
+      const planRows = plans.items || [];
+      const stockRows = inventory.items || [];
+      $('content').innerHTML = `<div class="layout"><section class="card"><div class="card-head"><h2>Товары</h2><button class="btn" onclick="newProduct()">Добавить товар</button></div>${table(productRows, [
+        { label: 'Товар', render: x => `<b>${esc(x.nameRu || x.name || '—')}</b><br><span class="muted">${esc(x.sku || '')}</span>` },
+        { label: 'Категория', render: x => esc(x.category || '—') },
+        { label: 'Цена', render: x => money(x.prices?.[0]?.amountMinor ?? x.priceMinor, 'AMD') },
+        { label: 'Статус', render: x => badge(x.isActive === false ? 'INACTIVE' : 'ACTIVE') }
+      ], 'Товаров нет')}<h2 style="margin:20px 0 10px">Тарифы</h2>${table(planRows, [
+        { label: 'Тариф', render: x => esc(x.name || '—') },
+        { label: 'Код', render: x => esc(x.code || '—') },
+        { label: 'Цена', render: x => money(x.basePriceMinor, x.currency) }
+      ], 'Тарифов нет')}</section><aside class="card"><div class="card-head"><h2>Склад</h2></div><div class="stack">${stockRows.map(x => workCard(x.product?.nameRu || x.productId, Number(x.availableQuantity || 0) <= Number(x.lowStockThreshold || 5) ? 'LOW_STOCK' : 'OK', [`Доступно: ${esc(x.availableQuantity ?? 0)}`, `Резерв: ${esc(x.reservedQuantity ?? 0)}`], `<button class="btn secondary" onclick="adjustStock('${attr(x.productId)}', ${Number(x.availableQuantity || 0)})">Корректировать</button>`)).join('') || empty('Склад пуст')}</div></aside></div>`;
+    }
+    function newProduct() {
+      modal('Новый товар', `<div class="split"><label class="form-field">SKU<input id="productSku" /></label><label class="form-field">Название<input id="productName" /></label><label class="form-field">Категория<input id="productCategory" /></label><label class="form-field">Цена AMD<input id="productPrice" type="number" min="0" /></label><label class="form-field full">Остаток<input id="productStock" type="number" min="0" value="0" /></label></div>`, async root => {
+        const sku = root.querySelector('#productSku').value.trim();
+        const nameRu = root.querySelector('#productName').value.trim();
+        if (!sku || !nameRu) throw new Error('Укажите SKU и название.');
+        await api('/v1/admin/catalog/products', { method: 'POST', body: JSON.stringify({ sku, nameRu, category: root.querySelector('#productCategory').value.trim() || 'other', priceMinor: Number(root.querySelector('#productPrice').value || 0) * 100, availableQuantity: Number(root.querySelector('#productStock').value || 0) }) });
+        toast('Товар добавлен.');
+        await catalog();
+      }, 'Добавить');
+    }
+    function adjustStock(productId, current) {
+      modal('Корректировка склада', `<label class="form-field">Доступный остаток<input id="stockAmount" type="number" min="0" value="${current}" /></label><label class="form-field">Причина<input id="stockReason" /></label>`, async root => {
+        const reason = root.querySelector('#stockReason').value.trim();
+        if (!reason) throw new Error('Укажите причину.');
+        await api(`/v1/admin/inventory/${encodeURIComponent(productId)}`, { method: 'PATCH', body: JSON.stringify({ availableQuantity: Number(root.querySelector('#stockAmount').value), reason }) });
+        toast('Остаток обновлён.');
+        await catalog();
+      });
+    }
+    async function team() {
+      const result = await api('/v1/admin/admin-users');
+      const rows = result.items || [];
+      const roles = result.roles || [];
+      state.cache.adminUsers = rows;
+      state.cache.adminRoles = roles;
+      $('content').innerHTML = `<div class="toolbar"><div class="toolbar-left"><span class="muted">Доступ выдан только сотрудникам LOUSA.</span></div><div class="toolbar-right"><button class="btn" onclick="newAdminUser()">Добавить сотрудника</button></div></div><section class="card">${table(rows, [
+        { label: 'Сотрудник', render: item => `<b>${esc(item.name)}</b><br><span class="muted">${esc(item.email)}</span>` },
+        { label: 'Роль', render: item => badge(item.role, item.role.replaceAll('_', ' ')) },
+        { label: 'Доступ', render: item => badge(item.isActive ? 'ACTIVE' : 'BLOCKED', item.isActive ? 'Активен' : 'Отключён') },
+        { label: 'Последний вход', render: item => stamp(item.lastLoginAt) },
+        { label: '', render: item => `<button class="btn secondary" onclick="editAdminUser('${attr(item.id)}')">Управлять</button>` }
+      ], 'Сотрудников нет')}</section>`;
+    }
+    function newAdminUser() {
+      const roles = (state.cache.adminRoles || []).filter(item => item !== 'OWNER');
+      modal('Добавить сотрудника', `<div class="notice info">Создайте отдельный доступ и передайте временный пароль сотруднику защищённым каналом.</div><div class="split"><label class="form-field">Имя<input id="adminUserName" /></label><label class="form-field">Email<input id="adminUserEmail" type="email" autocomplete="off" /></label><label class="form-field">Роль<select id="adminUserRole">${roles.map(item => `<option value="${item}">${item.replaceAll('_', ' ')}</option>`).join('')}</select></label><label class="form-field">Временный пароль<input id="adminUserPassword" type="password" autocomplete="new-password" /></label></div>`, async root => {
+        await api('/v1/admin/admin-users', { method: 'POST', body: JSON.stringify({ name: root.querySelector('#adminUserName').value.trim(), email: root.querySelector('#adminUserEmail').value.trim(), role: root.querySelector('#adminUserRole').value, temporaryPassword: root.querySelector('#adminUserPassword').value }) });
+        toast('Доступ сотрудника создан.');
+        await team();
+      }, 'Создать доступ');
+    }
+    function editAdminUser(id) {
+      const item = (state.cache.adminUsers || []).find(value => value.id === id);
+      if (!item) return team();
+      const roles = state.cache.adminRoles || [];
+      modal(`Доступ: ${item.name}`, `<div class="split"><label class="form-field">Имя<input id="editAdminName" value="${attr(item.name)}" /></label><label class="form-field">Роль<select id="editAdminRole">${roles.map(roleName => `<option value="${roleName}" ${roleName === item.role ? 'selected' : ''}>${roleName.replaceAll('_', ' ')}</option>`).join('')}</select></label><label class="form-field">Доступ<select id="editAdminActive"><option value="true" ${item.isActive ? 'selected' : ''}>Активен</option><option value="false" ${!item.isActive ? 'selected' : ''}>Отключён</option></select></label><label class="form-field">Новый пароль<input id="editAdminPassword" type="password" autocomplete="new-password" placeholder="Оставьте пустым" /></label></div>`, async root => {
+        await api(`/v1/admin/admin-users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name: root.querySelector('#editAdminName').value.trim(), role: root.querySelector('#editAdminRole').value, isActive: root.querySelector('#editAdminActive').value === 'true', temporaryPassword: root.querySelector('#editAdminPassword').value || undefined }) });
+        toast('Права сотрудника обновлены.');
+        await team();
+      });
+    }
+    async function project() {
+      const data = await api('/v1/admin/project');
+      const overview = data.overview || {};
+      const integrations = data.integrations || {};
+      const integrationLabel = value => value === true || value === 'configured' || value === 'lousa_vector_map' ? ['ACTIVE', 'Подключено'] : value === 'not_configured' ? ['BLOCKED', 'Не подключено'] : ['INFO', String(value || '—')];
+      $('content').innerHTML = `${kpis([
+        { label: 'Клиентки', value: overview.users ?? 0, hint: 'аккаунты в приложении' },
+        { label: 'Заказы', value: overview.orders ?? 0, hint: 'актуальная база' },
+        { label: 'Курьеры', value: overview.activeCouriers ?? 0, hint: 'активные аккаунты' },
+        { label: 'Товары', value: overview.catalogItems ?? 0, hint: 'доступны в каталоге' }
+      ])}<div class="command-grid"><section class="card"><div class="card-head"><div><h2>Подключения</h2><p class="muted">Показываем состояние сервисов, но никогда не выводим ключи и пароли.</p></div><span class="badge info">${esc(data.environment || '—')}</span></div><dl class="summary-list">${[
+        ['База данных', integrations.database], ['Карта LOUSA', integrations.maps], ['Курьерский bridge', integrations.courierBridge], ['Email', integrations.email], ['Платежи', integrations.payments]
+      ].map(([label, value]) => { const [status, text] = integrationLabel(value); return `<div><dt>${esc(label)}</dt><dd>${badge(status, text)}</dd></div>`; }).join('')}</dl></section><section class="card"><div class="card-head"><h2>Зоны доставки</h2><span class="muted">${(data.deliveryZones || []).length}</span></div><div class="stack">${(data.deliveryZones || []).map(zone => workCard(zone.name, zone.isActive ? 'ACTIVE' : 'INACTIVE', [`Тип: ${esc(zone.type || '—')}`, zone.radiusKm ? `Радиус: ${esc(zone.radiusKm)} км` : 'Геометрия зоны задана', `Базовая доставка: ${money(zone.baseFeeMinor, zone.currency)}`])).join('') || empty('Зоны не настроены')}</div></section></div>`;
+    }
+    async function payments() {
+      const result = await api('/v1/admin/payments');
+      const rows = result.items || [];
+      $('content').innerHTML = `<section class="card">${table(rows, [
+        { label: 'Дата', render: x => stamp(x.createdAt) },
+        { label: 'Клиент', render: x => esc(x.customer?.name || x.customerName || '—') },
+        { label: 'Сумма', render: x => money(x.amountMinor, x.currency) },
+        { label: 'Статус', render: x => badge(x.status) },
+        { label: 'Заказ', render: x => esc(x.orderCode || x.orderId || '—') },
+        { label: '', render: x => /PAID|SUCCEEDED/.test(String(x.status)) ? `<button class="btn secondary" onclick="refundPayment('${attr(x.id)}')">Возврат</button>` : '—' }
+      ], 'Платежей нет')}</section>`;
+    }
+    function refundPayment(id) {
+      modal('Возврат платежа', `<div class="notice bad">Возврат запускает финансовую операцию и требует причины.</div><label class="form-field">Причина<textarea id="refundReason"></textarea></label>`, async root => {
+        const reason = root.querySelector('#refundReason').value.trim();
+        if (!reason) throw new Error('Укажите причину.');
+        if (!confirm('Подтвердить возврат?')) return false;
+        await api(`/v1/admin/payments/${encodeURIComponent(id)}/refund`, { method: 'POST', body: JSON.stringify({ reason }) });
+        toast('Возврат отправлен.');
+        await payments();
+      }, 'Подтвердить');
+    }
+    async function support() {
+      const [customerResult, courierResult] = await Promise.all([
+        api('/v1/admin/support/tickets'),
+        courierSupportApi('/tickets').catch(error => ({ items: [], bridgeError: error.message }))
+      ]);
+      const customerRows = customerResult.items || [];
+      const courierRows = courierResult.items || [];
+      $('content').innerHTML = `<div class="toolbar"><button class="btn" onclick="newTicket()">Новое обращение клиентки</button></div><div class="command-grid"><section class="card"><div class="card-head"><div><h2>Клиентки</h2><p class="muted">Вопросы из основного приложения</p></div><span class="muted">${customerRows.length}</span></div><div class="stack">${customerRows.map(x => workCard(x.subject || x.id, x.status, [`${esc(x.user?.name || 'Клиентка')} · ${esc(x.category || 'GENERAL')} · ${esc(x.priority || 'NORMAL')}`, esc(x.safeSummary || '')], `<button class="btn secondary" onclick="editTicket('${attr(x.id)}','${attr(x.status)}')">Открыть</button>`)).join('') || empty('Обращений клиенток нет')}</div></section><section class="card"><div class="card-head"><div><h2>Курьеры</h2><p class="muted">Рабочие вопросы из LOUSA Courier</p></div><span class="muted">${courierRows.length}</span></div>${courierResult.bridgeError ? `<div class="notice bad">${esc(courierResult.bridgeError)}</div>` : ''}<div class="stack">${courierRows.map(x => { const last = (x.messages || []).at(-1); return workCard(x.subject || x.id, x.status, [`${esc(x.courier?.name || 'Курьер')} · ${esc(x.category || 'GENERAL')} · ${esc(x.priority || 'NORMAL')}`, last ? `${esc(last.sender === 'ADMIN' ? 'Поддержка' : 'Курьер')}: ${esc(last.body)}` : 'Сообщений нет', `Обновлено: ${stamp(x.updatedAt)}`], `<button class="btn secondary" onclick="editCourierTicket('${attr(x.id)}')">Открыть диалог</button>`); }).join('') || empty('Обращений курьеров нет')}</div></section></div>`;
+    }
+    function newTicket() {
+      modal('Новое обращение', `<div class="split"><label class="form-field">Тема<input id="ticketSubject" /></label><label class="form-field">Категория<select id="ticketCategory"><option>GENERAL</option><option>DELIVERY</option><option>ORDER</option><option>PAYMENT</option></select></label><label class="form-field full">Сообщение<textarea id="ticketMessage"></textarea></label></div>`, async root => {
+        const subject = root.querySelector('#ticketSubject').value.trim();
+        const message = root.querySelector('#ticketMessage').value.trim();
+        if (!subject || !message) throw new Error('Заполните тему и сообщение.');
+        await api('/v1/admin/support/tickets', { method: 'POST', body: JSON.stringify({ subject, message, category: root.querySelector('#ticketCategory').value }) });
+        toast('Обращение создано.');
+        await support();
+      }, 'Создать');
+    }
+    function editTicket(id, current) {
+      modal('Обновить обращение', `<label class="form-field">Статус<select id="ticketStatus">${['OPEN','PENDING_CUSTOMER','PENDING_TEAM','RESOLVED','CLOSED'].map(s => `<option value="${s}" ${s === current ? 'selected' : ''}>${s}</option>`).join('')}</select></label><label class="form-field">Ответ<textarea id="ticketReply"></textarea></label>`, async root => {
+        const status = root.querySelector('#ticketStatus').value;
+        const reply = root.querySelector('#ticketReply').value.trim();
+        await api(`/v1/admin/support/tickets/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status, reason: 'Из админ-панели' }) });
+        if (reply) await api(`/v1/admin/support/tickets/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ message: reply }) });
+        toast('Обращение обновлено.');
+        await support();
+      });
+    }
+    async function editCourierTicket(id) {
+      const result = await courierSupportApi(`/tickets/${encodeURIComponent(id)}`);
+      const ticket = result.ticket || result;
+      const messages = ticket.messages || [];
+      const history = messages.map(message => `<div class="notice ${message.sender === 'ADMIN' ? 'info' : ''}"><strong>${esc(message.sender === 'ADMIN' ? 'Поддержка LOUSA' : ticket.courier?.name || 'Курьер')}</strong><div style="margin-top:6px;white-space:pre-wrap">${esc(message.body)}</div><div class="muted" style="margin-top:6px">${stamp(message.createdAt)}</div></div>`).join('') || empty('В диалоге пока нет сообщений');
+      modal(`Курьер: ${esc(ticket.subject || 'Обращение')}`, `<div class="stack">${history}</div><label class="form-field">Статус<select id="courierTicketStatus">${['OPEN','IN_PROGRESS','RESOLVED','CLOSED'].map(status => `<option value="${status}" ${status === ticket.status ? 'selected' : ''}>${status}</option>`).join('')}</select></label><label class="form-field">Ответ курьеру<textarea id="courierTicketReply" placeholder="Ответ появится в приложении курьера"></textarea></label>`, async root => {
+        const status = root.querySelector('#courierTicketStatus').value;
+        const reply = root.querySelector('#courierTicketReply').value.trim();
+        if (reply) await courierSupportApi(`/tickets/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ message: reply }) });
+        if (status !== ticket.status) await courierSupportApi(`/tickets/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+        toast('Диалог с курьером обновлён.');
+        await support();
+      }, 'Сохранить и отправить');
+    }
+    async function analytics() {
+      const data = await api('/v1/admin/analytics');
+      const values = data.metrics || data;
+      $('content').innerHTML = `${kpis([
+        { label: 'Назначение, мин', value: values.assignmentTimeMinutes ?? values.avgAssignmentMinutes ?? '—' },
+        { label: 'В окне заботы', value: values.deliverySlaPercent === undefined ? '—' : `${values.deliverySlaPercent}%` },
+        { label: 'Успешные вручения', value: values.deliverySuccessPercent === undefined ? '—' : `${values.deliverySuccessPercent}%` },
+        { label: 'Риски опоздания', value: values.openExceptions ?? '—' }
+      ])}<section class="card"><div class="notice">Все показатели поступают из защищённого Admin API. В идеале backend должен отдавать отдельный KPI: процент боксов, доставленных за день до начала цикла.</div></section>`;
+    }
+    async function audit() {
+      const result = await api('/v1/admin/audit-log');
+      const rows = result.items || [];
+      $('content').innerHTML = `<section class="card">${table(rows, [
+        { label: 'Время', render: x => stamp(x.createdAt) },
+        { label: 'Действие', render: x => esc(x.action || '—') },
+        { label: 'Сущность', render: x => esc(x.entityType || '—') },
+        { label: 'Роль', render: x => esc(x.actorRole || '—') },
+        { label: 'ID', render: x => `<span class="muted">${esc(x.entityId || '—')}</span>` }
+      ], 'Журнал пуст')}</section>`;
+    }
+    async function settings() {
+      const result = await api('/v1/admin/settings');
+      const rows = result.items || [];
+      $('content').innerHTML = `<section class="card">${table(rows, [
+        { label: 'Параметр', render: x => esc(x.label || x.key || '—') },
+        { label: 'Значение', render: x => esc(x.value ?? '—') },
+        { label: 'Описание', render: x => esc(x.description || '—') }
+      ], 'Настройки недоступны')}</section>`;
+    }
+    async function globalSearch() {
+      const query = $('globalSearch').value.trim();
+      if (!query) return;
+      const result = await api(`/v1/admin/search?q=${encodeURIComponent(query)}`);
+      const rows = result.items || [];
+      modal(`Поиск: ${query}`, `<div class="stack">${rows.map(x => workCard(x.title || x.code || x.id, x.type || 'RESULT', [esc(x.subtitle || '')])).join('') || empty('Ничего не найдено')}</div>`, async () => true, 'Закрыть');
+    }
+
+    const views = { today, orders, packing, dispatch, support, customers, subscriptions, catalog, team, project, payments, analytics, audit, settings };
+    Object.assign(window, { setView, openOrder, changeOrderStatus, scheduleCareWindow, addOrderNote, completePacking, openDelivery, assignCourier, editDeliveryStatus, newCourier, messageCourier, toggleCourier, focusMapOn, openCustomer, editCustomer, editSubscription, createTrial, newProduct, adjustStock, newAdminUser, editAdminUser, refundPayment, newTicket, editTicket, editCourierTicket, closeDrawer });
+
+    $('nav').onclick = event => {
+      const button = event.target.closest('button[data-view]');
+      if (button && !button.disabled) setView(button.dataset.view);
+    };
+    $('refreshButton').onclick = load;
+    $('globalSearch').onkeydown = event => { if (event.key === 'Enter') globalSearch(); };
+    $('loginButton').onclick = async () => {
+      try {
+        $('loginError').textContent = '';
+        const result = await api('/v1/admin/auth/login', { method: 'POST', body: JSON.stringify({ email: $('email').value.trim(), password: $('password').value }) });
+        state.accessToken = result.accessToken;
+        sessionStorage.setItem(ACCESS_TOKEN_KEY, state.accessToken);
+        state.admin = result.admin;
+        openApp();
+      } catch (error) {
+        $('loginError').textContent = error.message;
+      }
+    };
+    $('logout').onclick = async () => {
+      await api('/v1/admin/auth/logout', { method: 'POST' }).catch(() => {});
+      state.accessToken = null;
+      sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      location.reload();
+    };
+    function openApp() {
+      $('adminName').innerHTML = `${esc(state.admin?.name || state.admin?.email || 'Администратор')}<br><span>${esc(role())}</span>`;
+      $('login').classList.add('hidden');
+      $('app').classList.remove('hidden');
+      if (!can(state.view)) state.view = 'today';
+      renderNav();
+      setView(state.view);
+    }
+    function toggleAutoRefresh() {
+      state.autoRefresh = !state.autoRefresh;
+      if (state.refreshTimer) clearInterval(state.refreshTimer);
+      state.refreshTimer = state.autoRefresh ? setInterval(() => load(), 60000) : null;
+      $('refreshButton').textContent = state.autoRefresh ? 'Авто 60с' : 'Обновить';
+      toast(state.autoRefresh ? 'Автообновление включено.' : 'Автообновление выключено.');
+    }
+    api('/v1/admin/me').then(result => { state.admin = result.admin; openApp(); }).catch(() => renderNav());
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { closeDrawer(); closeModal(); }
+      if ((event.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) || (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey))) {
+        event.preventDefault();
+        $('globalSearch')?.focus();
+      }
+    });
+    $('refreshButton').ondblclick = toggleAutoRefresh;
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+name: Deploy LOUSA Operations V3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'admin-v3-site/**'
+      - '.github/workflows/deploy-admin-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: admin-v3-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: admin-v3-site
+      - id: deployment
+        uses: actions/deploy-pages@v4
